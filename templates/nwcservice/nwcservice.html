@@ -1,0 +1,63 @@
+<!--/////////////////////////////////////////////////-->
+<!--////////////////USER FACING PAGE/////////////////-->
+<!--/////////////////////////////////////////////////-->
+
+{% extends "public.html" %} {% block page %}
+<div class="row q-col-gutter-md justify-center">
+  <div class="col-12 col-sm-6 col-md-5 col-lg-4">
+    <q-card class="q-pa-lg">
+      <q-card-section class="q-pa-none">
+        <div class="text-center">
+          <a class="text-secondary" href="lightning:{{ lnurl }}">
+            <q-responsive :ratio="1" class="q-mx-md">
+              <qrcode :value="qrValue" :options="{width: 800}" class="rounded-borders"></qrcode>
+            </q-responsive>
+          </a>
+        </div>
+        <div class="row q-mt-lg q-gutter-sm">
+          <q-btn outline color="grey" @click="copyText(qrValue)">Copy LNURL </q-btn>
+        </div>
+      </q-card-section>
+
+    </q-card>
+  </div>
+  <div class="col-12 col-sm-6 col-md-5 col-lg-4 q-gutter-y-md">
+    <q-card>
+      <q-card-section>
+        <h6 class="text-subtitle1 q-mb-sm q-mt-none">Public page</h6>
+        <p class="q-my-none">
+          Most extensions have a public page that can be shared
+          (this page will still be accessible even if you have restricted
+          access to your LNbits install).
+          <br /><br />
+          In this example when a user pays the LNURLpay it triggers an event via a websocket waiting for the payment, which you can subscribe to somewhere using wss://{your-lnbits}/api/v1/ws/{the-id-of-this-record}
+      </q-card-section>
+      <q-card-section class="q-pa-none">
+        <q-separator></q-separator>
+        <q-list> </q-list>
+      </q-card-section>
+    </q-card>
+  </div>
+</div>
+{% endblock %} {% block scripts %}
+<script>
+  Vue.component(VueQrcode.name, VueQrcode)
+
+  new Vue({
+    el: '#vue',
+    mixins: [windowMixin],
+    data: function () {
+      return {
+        qrValue: '{{lnurlpay}}',
+        myExtensionID: '{{nwcservice_id}}'
+      }
+    },
+    created: function () {
+      // Will trigger payment reaction when payment received, sent from tasks.py
+      eventReactionWebocket(this.myExtensionID)
+    },
+    methods: {
+    }
+  })
+</script>
+{% endblock %}

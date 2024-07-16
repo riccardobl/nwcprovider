@@ -1,0 +1,28 @@
+{
+  "name": "NWCService",
+  "short_description": "Minimal extension to build on",
+  "tile": "/nwcservice/static/image/nwc_service.png",
+  "min_lnbits_version": "0.12.5",
+  "contributors": [
+    {
+      "name": "Riccardo Balbo",
+      "uri": "https://github.com/riccardobl",
+      "role": "Dev"
+    }
+  ],
+  "images": [
+    {
+      "uri": "https://raw.githubusercontent.com/lnbits/nwcservice/main/static/image/1.png",
+      "link": "https://www.youtube.com/embed/SkkIwO_X4i4?si=9JJh1Fc6GfHDZK6b"
+    },
+    {
+      "uri": "https://raw.githubusercontent.com/lnbits/nwcservice/main/static/image/2.png"
+    },
+    {
+      "uri": "https://raw.githubusercontent.com/lnbits/nwcservice/main/static/image/3.png"
+    }
+  ],
+  "description_md": "https://raw.githubusercontent.com/lnbits/nwcservice/main/description.md",
+  "terms_and_conditions_md": "https://raw.githubusercontent.com/lnbits/nwcservice/main/toc.md",
+  "license": "MIT"
+}

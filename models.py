@@ -22,9 +22,7 @@ class NWCKey(BaseModel):
         try:
             return cls.permissions.split(" ")
         except:
-            # TODO: log error
             return []
-
 
 
     @classmethod
@@ -51,7 +49,6 @@ class NWCBudget(BaseModel):
         next_cycle = last_cycle + cls.refresh_window
         return last_cycle, next_cycle
     
-    
     @classmethod
     def from_row(cls, row: Row) -> "NWCBudget":
         return cls(**dict(row))
@@ -68,11 +65,11 @@ class NWCLog(BaseModel):
         return cls(**dict(row))
 
 
-
 class NWCNewBudget(BaseModel):
     budget_msats: int
     refresh_window: int
     created_at: int
+
 
 class NWCRegistrationRequest(BaseModel):
     permissions: List[str]

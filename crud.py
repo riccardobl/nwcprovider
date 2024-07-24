@@ -12,10 +12,11 @@ async def create_nwc(
         expires_at: int ,
         permissions:List[str] ,
         budgets: Optional[List[NWCNewBudget]] = None
-):
+) -> NWCKey:
     # Check if the key already exists
     if await get_nwc(pubkey, None, True):
         raise Exception("Public key already used")
+    # If not, create it
     now=int(time.time())
     await db.execute(
         """
@@ -24,7 +25,7 @@ async def create_nwc(
         """,
         (pubkey, wallet_id, description, " ".join(permissions), now,int(expires_at) if expires_at else 0, now)
     )
-    
+    # Add budgets
     if budgets:
         for budget in budgets:
             await db.execute(
@@ -34,6 +35,7 @@ async def create_nwc(
                 """,
                 (pubkey, budget.budget_msats, budget.refresh_window, budget.created_at)
             )
+    # Return the created key
     return NWCKey(
         pubkey=pubkey, 
         wallet=wallet_id, 
@@ -43,6 +45,7 @@ async def create_nwc(
         created_at=now,
         last_used=now
     )
+
 
 async def delete_nwc(
         pubkey: str,
@@ -68,6 +71,7 @@ async def get_wallet_nwcs(
         "SELECT * FROM nwcprovider.keys WHERE wallet = ? AND (expires_at = 0 OR expires_at > ?)", (wallet_id, int(time.time()) if not include_expired else -1 )
     )
     return [NWCKey(**row) for row in rows]
+
 
 async def get_nwc(
         pubkey: str,
@@ -95,6 +99,7 @@ async def get_nwc(
         )
     return NWCKey(**row)
     
+
 async def get_budgets_nwc(pubkey, calculate_spent=False):
     rows = await db.fetchall(
         "SELECT * FROM nwcprovider.budgets WHERE pubkey = ?", (pubkey)
@@ -114,19 +119,19 @@ async def get_budgets_nwc(pubkey, calculate_spent=False):
     return budgets
 
 
-async def log_nwc(
-        pubkey: str,
-        payload:Optional[Any] = None
-):
-    if not payload: payload=""
-    payload = json.dumps(payload)
-    await db.execute(
-        """
-        INSERT INTO nwcprovider.logs (pubkey, payload, created_at)
-        VALUES (?, ?, ?)
-        """,
-        (pubkey, payload, int(time.time()))
-    )
+# async def log_nwc(
+#         pubkey: str,
+#         payload:Optional[Any] = None
+# ):
+#     if not payload: payload=""
+#     payload = json.dumps(payload)
+#     await db.execute(
+#         """
+#         INSERT INTO nwcprovider.logs (pubkey, payload, created_at)
+#         VALUES (?, ?, ?)
+#         """,
+#         (pubkey, payload, int(time.time()))
+#     )
 
      
 async def tracked_spend_nwc(
@@ -145,7 +150,7 @@ async def tracked_spend_nwc(
                 SELECT SUM(amount_msats) FROM nwcprovider.spent WHERE pubkey = ? AND created_at >= ? AND created_at < ?
                 """,
                 (pubkey, last_cycle, next_cycle)
-            )[0] or 0  # Ensure we get an int, default to 0 if None
+            )[0] or 0  
             if tot_spent_in_range_msats + amount_msats > budget.budget_msats:
                 in_budget = False
                 break

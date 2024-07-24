@@ -6,7 +6,8 @@ from lnbits.core.models import Payment
 from lnbits.core.services import create_invoice, pay_invoice, check_transaction_status, PaymentError
 from bolt11 import decode as bolt11_decode
 from lnbits.core.crud import get_wallet_payment, get_payments, get_wallet
-from .crud import get_nwc, tracked_spend_nwc, log_nwc, get_config_nwc
+from .crud import get_nwc, tracked_spend_nwc,  get_config_nwc
+#from .crud import  log_nwc
 from . import execution_queue
 from .NWCServiceProvider import NWCServiceProvider
 from typing import Dict, List, Tuple
@@ -113,7 +114,7 @@ async def _on_pay_invoice(sp: NWCServiceProvider, pubkey: str, payload: Dict) ->
     out = {
         "preimage": preimage,
     }
-    await log_nwc(pubkey, payload)
+    #await log_nwc(pubkey, payload)
     return [(out,None, [])]
 
 
@@ -125,7 +126,7 @@ async def _on_multi_pay_invoice(sp: NWCServiceProvider, pubkey: str, payload: Di
     params = payload.get("params", {})
     invoices = params.get("invoices", [])
     results = []
-
+    
     # Ensures all invoices are provided
     for i in invoices:
         invoice = i.get("invoice",None)
@@ -157,7 +158,7 @@ async def _on_multi_pay_invoice(sp: NWCServiceProvider, pubkey: str, payload: Di
                 "code": "INTERNAL",
                 "message": str(e)
             }))   
-    await log_nwc(pubkey, payload)
+    #await log_nwc(pubkey, payload)
     return results
 
 
@@ -198,7 +199,7 @@ async def _on_make_invoice(sp: NWCServiceProvider, pubkey: str, payload: Dict) -
     }
     if expiry:
         res["expires_at"] = int(time.time()) + int(expiry)
-    await log_nwc(pubkey, payload)
+    #await log_nwc(pubkey, payload)
     return [(res, None, [])]
 
 
@@ -238,7 +239,7 @@ async def _on_lookup_invoice(sp: NWCServiceProvider, pubkey: str, payload: Dict)
     }
     if invoice_data.description_hash:
         res["description_hash"] = invoice_data.description_hash
-    await log_nwc(pubkey, payload)
+    #await log_nwc(pubkey, payload)
     return [(res, None, [])]
 
 
@@ -288,7 +289,7 @@ async def _on_list_transactions(sp: NWCServiceProvider, pubkey: str, payload: Di
             "settled_at": p.time if is_settled else None,
             "metadata": {}
         })       
-    await log_nwc(pubkey, payload)
+    #await log_nwc(pubkey, payload)
     return [({
         "transactions": transactions
     }, None, [])]
@@ -304,7 +305,7 @@ async def _on_get_balance(sp: NWCServiceProvider, pubkey: str, payload: Dict) ->
     if not wallet:
         raise Exception("Wallet not found")
     balance = wallet.balance_msat
-    await log_nwc(pubkey, payload)
+    #await log_nwc(pubkey, payload)
     return [({
         "balance": balance
     }, None, [])]
@@ -317,6 +318,7 @@ async def _on_get_info(sp: NWCServiceProvider, pubkey: str, payload: Dict) -> Li
         return [(None, error, [])]
     sp_methods = sp.getSupportedMethods()
     permissions = nwc.getPermissions()
+    # Filter only methods supported by the extension and allowed by the permissions
     account_methods = []
     for spm in sp_methods:
         for p in permissions:
@@ -324,7 +326,7 @@ async def _on_get_info(sp: NWCServiceProvider, pubkey: str, payload: Dict) -> Li
             if spm in allowed_methods:
                 account_methods.append(spm)
                 break  
-    await log_nwc(pubkey, payload)
+    #await log_nwc(pubkey, payload)
     return [({
         "alias": settings.lnbits_site_title,
         "color": "",
@@ -333,7 +335,6 @@ async def _on_get_info(sp: NWCServiceProvider, pubkey: str, payload: Dict) -> Li
         "block_hash": "",
         "methods": account_methods
     }, None, [])]
-
 
 
 

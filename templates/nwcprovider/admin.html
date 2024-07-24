@@ -79,8 +79,6 @@
                 try {
                     const response = await LNbits.api
                         .request('POST', '/nwcprovider/api/v1/config', this.g.user.wallets[0].adminkey, data)
-
-
                     this.$q.notify({
                         message: 'Config saved, please restart the server',
                         color: 'positive',

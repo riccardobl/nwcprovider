@@ -1,20 +1,34 @@
-`The README.md typically serves as a guide for using the extension.`
+# NWC Service Provider Extension for [LNbits](https://github.com/lnbits/lnbits)
 
-# NWCService - An [LNbits](https://github.com/lnbits/lnbits) Extension
+Easily connect your LNbits wallets via [NWC](https://nwc.dev/).
 
-## A Starter Template for Your Own Extension
+## Installation
 
-Ready to start hacking? Once you've forked this extension, you can incorporate functions from other extensions as needed. 
+Install the extension via the .env file or through the admin UI on your LNbits server. More details can be found [here](https://github.com/lnbits/lnbits/wiki/LNbits-Extensions).
 
-### How to Use This Template
-> This guide assumes you're using this extension as a base for a new one, and have installed LNbits using https://github.com/lnbits/lnbits/blob/main/docs/guide/installation.md#option-1-recommended-poetry.
+## Configuration
 
-1. Install and enable the extension either through the official LNbits manifest or by adding https://raw.githubusercontent.com/lnbits/nwcservice/main/manifest.json to `"Server"/"Server"/"Extension Sources"`. ![Extension Sources](https://i.imgur.com/MUGwAU3.png) ![image](https://github.com/lnbits/nwcservice/assets/33088785/4133123b-c747-4458-ba6c-5cc7c0f124d8)
+Configure the extension from the "Settings" page in the top right menu when logged in as admin inside the extension page.
 
-2. `Ctrl c` shut down your LNbits installation.
-3. Download the extension files from https://github.com/lnbits/nwcservice to a folder outside of `/lnbits`, and initialize the folder with `git`. Alternatively, create a repo, copy the nwcservice extension files into it, then `git clone` the extension to a location outside of `/lnbits`. 
-4. Remove the installed extension from `lnbits/lnbits/extensions`.
-5. Create a symbolic link using `ln -s /home/ben/Projects/<name of your extension> /home/ben/Projects/lnbits/lnbits/extensions`.
-6. Restart your LNbits installation. You can now modify your extension and `git push` changes to a repo.
-7. When you're ready to share your manifest so others can install it, edit `/lnbits/nwcservice/manifest.json` to include the git credentials of your extension.
-8. IMPORTANT: If you want your extension to be added to the official LNbits manifest, please follow the guidelines here: https://github.com/lnbits/lnbits-extensions#important
+### Configuration Options:
+
+| Key           | Description                                                                                                                        | Default                        |
+|---------------|------------------------------------------------------------------------------------------------------------------------------------|--------------------------------|
+| relay         | URL of the nostr relay for dispatching and receiving NWC events. Use public relays or a custom one. Specify `nostrclient` to connect to the [nostrclient extension](https://github.com/lnbits/nostrclient). | nostrclient                    |
+| provider_key  | Nostr secret key of the NWC Service Provider.                                                                                      | Random key generated on install |
+| relay_alias   | Relay URL to display in pairing URLs. Set if different from `relay`.                                                               | Empty (uses the `relay` value)  |
+
+### Using Nostrclient
+
+The extension is preconfigured to connect to the nostrclient extension. Install it on the same LNbits instance and configure it to expose public websocket endpoints. Refer to the [nostrclient documentation](https://github.com/lnbits/nostrclient) for more information.
+
+### Using a Custom Relay
+
+To use a custom relay, set the `relay` key to the relay URL (e.g., `wss://nostr.wine`) in the extension's Settings page.
+
+## Usage
+
+1. Go to the extension page.
+2. Select a wallet and click the plus button to create a new NWC connection.
+3. Configure expiration, limits, and permissions.
+4. A pairing URL will be generated for you to open, copy, or scan with the NWC app. Note that the pairing URL is shown only once, but you can delete and recreate the connection to get a new one.

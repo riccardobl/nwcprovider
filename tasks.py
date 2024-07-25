@@ -186,6 +186,8 @@ async def _on_make_invoice(sp: NWCServiceProvider, pubkey: str, payload: Dict) -
         expiry=expiry)
     payment_status = await check_transaction_status(wallet_id=nwc.wallet, payment_hash=payment_hash)
     preimage = payment_status.preimage    
+    if not preimage: # Some backend do not return a preimage (eg. FakeWallet), so we fake it
+        preimage = "0000000000000000000000000000000000000000000000000000000000000000"
     res = {
         "type": "incoming",
         "invoice": payment_request,
@@ -225,6 +227,7 @@ async def _on_lookup_invoice(sp: NWCServiceProvider, pubkey: str, payload: Dict)
         raise Exception("Payment not found")
     invoice_data = bolt11_decode(payment.bolt11)
     is_settled = not payment.pending
+    timestamp = payment.time or invoice_data.date
     res = {
         "type": "outgoing" if payment.is_out else "incoming",
         "invoice": payment.bolt11,

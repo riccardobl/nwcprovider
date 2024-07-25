@@ -145,12 +145,12 @@ async def tracked_spend_nwc(
         in_budget = True
         for budget in budgets:
             last_cycle, next_cycle = budget.get_timestamp_range()
-            tot_spent_in_range_msats = await db.fetchone(
+            tot_spent_in_range_msats =(await db.fetchone(
                 """
                 SELECT SUM(amount_msats) FROM nwcprovider.spent WHERE pubkey = ? AND created_at >= ? AND created_at < ?
                 """,
                 (pubkey, last_cycle, next_cycle)
-            )[0] or 0  
+            ))[0] or 0  
             if tot_spent_in_range_msats + amount_msats > budget.budget_msats:
                 in_budget = False
                 break

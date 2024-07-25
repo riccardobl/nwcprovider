@@ -24,7 +24,7 @@
 	"customizations": {
 		"vscode": {
 			"settings": {
-				"python.pythonPath": "/opt/python/bin/python3.9"
+				// "python.pythonPath": "/opt/python/bin/python3.9"
 			}
 		}
 	},

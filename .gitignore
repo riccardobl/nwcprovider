@@ -1,1 +1,4 @@
 __pycache__
+lnbits
+tests/integration/strfry-data
+tests/integration/lnbits_itest_data

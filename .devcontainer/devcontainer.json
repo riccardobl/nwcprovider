@@ -9,8 +9,13 @@
 	},
 	"mounts": [
         "source=${localWorkspaceFolder}/.devcontainer/start.sh,target=/start-lnbits.sh,type=bind",
-        "source=${localWorkspaceFolder}/.devcontainer/setup.sh,target=/setup.sh,type=bind"
+        "source=${localWorkspaceFolder}/.devcontainer/setup.sh,target=/setup.sh,type=bind",
+		"source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind" 
+
     ],
+	"containerEnv": {
+		"IS_DEV_CONTAINER": "true",
+	},
 	"postCreateCommand": "/bin/bash /setup.sh ${containerWorkspaceFolder}",
   	"postStartCommand": "/bin/bash /start-lnbits.sh",
 	"forwardPorts": [
@@ -22,5 +27,7 @@
 				"python.pythonPath": "/opt/python/bin/python3.9"
 			}
 		}
-	}
+	},
+	"runArgs": ["--network", "host"] 
+
 }

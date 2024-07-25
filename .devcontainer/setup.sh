@@ -2,10 +2,11 @@
 CONTAINER_WORKSPACE_FOLDER=$1
 sudo apt update -y
 sudo apt install -y python3.9-distutils curl
+sudo apt-get install -y docker.io
+
 curl -fsSL https://deb.nodesource.com/setup_20.x -o /tmp/nodesource_setup.sh
 sudo bash /tmp/nodesource_setup.sh
 sudo apt-get install -y nodejs
-cd ..
 if [ ! -d lnbits ] ; then 
     sudo git clone https://github.com/lnbits/lnbits.git; 
 fi 
@@ -18,6 +19,8 @@ sudo ln -s $VENV_PATH /opt/python
 make bundle
 poetry install --no-interaction 
 mkdir -p lnbits/extensions/ 
-ln -s $CONTAINER_WORKSPACE_FOLDER lnbits/extensions/nwcprovider
+if [ ! -d lnbits/extensions/nwcprovider ] ; then 
+    ln -s $CONTAINER_WORKSPACE_FOLDER lnbits/extensions/nwcprovider
+fi
 
 

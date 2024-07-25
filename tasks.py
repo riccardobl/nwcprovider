@@ -233,9 +233,9 @@ async def _on_lookup_invoice(sp: NWCServiceProvider, pubkey: str, payload: Dict)
         "payment_hash": payment.payment_hash,
         "amount": abs(payment.msat),
         "fees_paid": abs(payment.fee),
-        "created_at": payment.time,
-        "expires_at": payment.time+payment.expiry,
-        "settled_at": payment.time if is_settled else None,
+        "created_at": timestamp,
+        "expires_at": payment.expiry if payment.expiry else timestamp+3600,
+        "settled_at": timestamp if is_settled else None,
         "metadata": {}
     }
     if invoice_data.description_hash:

@@ -18,9 +18,9 @@ async def m001_initial(db):
     )
 
     await db.execute(
-        """
+        f"""
         CREATE TABLE nwcprovider.spent (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, 
+            id {db.serial_primary_key}, 
             pubkey TEXT NOT NULL, 
             amount_msats INTEGER NOT NULL,
             created_at INTEGER NOT NULL, 
@@ -30,9 +30,9 @@ async def m001_initial(db):
     )
  
     await db.execute(
-          """
+          f"""
         CREATE TABLE nwcprovider.logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, 
+            id {db.serial_primary_key}, 
             pubkey TEXT NOT NULL,  
             payload TEXT NOT NULL,
             created_at INTEGER NOT NULL, 
@@ -42,9 +42,9 @@ async def m001_initial(db):
     )
 
     await db.execute(
-        """
+        f"""
         CREATE TABLE nwcprovider.budgets (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id {db.serial_primary_key},
             pubkey TEXT NOT NULL,
             budget_msats INTEGER NOT NULL,
             refresh_window INTEGER NOT NULL,

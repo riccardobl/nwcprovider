@@ -94,7 +94,7 @@ async def _process_invoice(wallet_id:str, pubkey:str, invoice:str, amount_msats:
     }
 
 
-async def _on_pay_invoice(sp: NWCServiceProvider, pubkey: str, payload: Dict) -> List[Tuple[Dict, Dict]]:
+async def _on_pay_invoice(sp: NWCServiceProvider, pubkey: str, payload: Dict) -> List[Tuple[Dict, Dict, List]]:
     nwc = await get_nwc(pubkey, None, False, True)
     error = await _check(nwc, "pay_invoice", payload)
     if error: 
@@ -118,7 +118,7 @@ async def _on_pay_invoice(sp: NWCServiceProvider, pubkey: str, payload: Dict) ->
     return [(out,None, [])]
 
 
-async def _on_multi_pay_invoice(sp: NWCServiceProvider, pubkey: str, payload: Dict) -> List[Tuple[Dict, Dict]]:
+async def _on_multi_pay_invoice(sp: NWCServiceProvider, pubkey: str, payload: Dict) -> List[Tuple[Dict, Dict, List]]:
     nwc = await get_nwc(pubkey, None, False, True)
     error = await _check(nwc, "multi_pay_invoice", payload)
     if error:
@@ -149,9 +149,10 @@ async def _on_multi_pay_invoice(sp: NWCServiceProvider, pubkey: str, payload: Di
                     "preimage": res.get("preimage"),
                 },
                 None,
-                {
-                    "d": id if id else res.get("payment_hash"),
-                })
+                [
+                    ["d", id if id else res.get("payment_hash")]
+                ]
+                )
                 results.append(r)
         except Exception as e:
             results.append((None, {
@@ -162,7 +163,7 @@ async def _on_multi_pay_invoice(sp: NWCServiceProvider, pubkey: str, payload: Di
     return results
 
 
-async def _on_make_invoice(sp: NWCServiceProvider, pubkey: str, payload: Dict) -> List[Tuple[Dict, Dict]]:
+async def _on_make_invoice(sp: NWCServiceProvider, pubkey: str, payload: Dict) -> List[Tuple[Dict, Dict, List]]:
     nwc = await get_nwc(pubkey, None, False, True)
     error = await _check(nwc, "make_invoice", payload)
     if error:
@@ -203,7 +204,7 @@ async def _on_make_invoice(sp: NWCServiceProvider, pubkey: str, payload: Dict) -
     return [(res, None, [])]
 
 
-async def _on_lookup_invoice(sp: NWCServiceProvider, pubkey: str, payload: Dict) -> List[Tuple[Dict, Dict]]:
+async def _on_lookup_invoice(sp: NWCServiceProvider, pubkey: str, payload: Dict) -> List[Tuple[Dict, Dict, List]]:
     nwc = await get_nwc(pubkey, None, False, True)
     error = await _check(nwc, "lookup_invoice", payload)
     if error:
@@ -243,7 +244,7 @@ async def _on_lookup_invoice(sp: NWCServiceProvider, pubkey: str, payload: Dict)
     return [(res, None, [])]
 
 
-async def _on_list_transactions(sp: NWCServiceProvider, pubkey: str, payload: Dict) -> List[Tuple[Dict, Dict]]:
+async def _on_list_transactions(sp: NWCServiceProvider, pubkey: str, payload: Dict) -> List[Tuple[Dict, Dict, List]]:
     nwc = await get_nwc(pubkey, None, False, True)
     error = await _check(nwc, "list_transactions", payload)
     if error:
@@ -295,7 +296,7 @@ async def _on_list_transactions(sp: NWCServiceProvider, pubkey: str, payload: Di
     }, None, [])]
 
 
-async def _on_get_balance(sp: NWCServiceProvider, pubkey: str, payload: Dict) -> List[Tuple[Dict, Dict]]:
+async def _on_get_balance(sp: NWCServiceProvider, pubkey: str, payload: Dict) -> List[Tuple[Dict, Dict, List]]:
     nwc = await get_nwc(pubkey, None, False, True)
     error = await _check(nwc, "get_balance", payload)
     if error:
@@ -311,7 +312,7 @@ async def _on_get_balance(sp: NWCServiceProvider, pubkey: str, payload: Dict) ->
     }, None, [])]
 
 
-async def _on_get_info(sp: NWCServiceProvider, pubkey: str, payload: Dict) -> List[Tuple[Dict, Dict]]:
+async def _on_get_info(sp: NWCServiceProvider, pubkey: str, payload: Dict) -> List[Tuple[Dict, Dict, List]]:
     nwc = await get_nwc(pubkey, None, False, True)
     error = await _check(nwc, "get_info", payload)
     if error:

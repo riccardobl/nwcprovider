@@ -96,7 +96,7 @@ class NWCServiceProvider:
         """
         return self.supported_methods
 
-    def addRequestListener(self, method: str, l: Callable[["NWCServiceProvider", str, Dict], List[Tuple[Dict, Dict]]]):
+    def addRequestListener(self, method: str, l: Callable[["NWCServiceProvider", str, Dict], List[Tuple[Dict, Dict, List]]]):
         """
         Adds a request listener for a specific method.
 

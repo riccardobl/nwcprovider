@@ -16,7 +16,7 @@ from lnbits.app import settings
 from lnbits.helpers import encrypt_internal_message
 from urllib.parse import quote
 from Cryptodome.Util.Padding import pad, unpad
-
+from typing import List, Dict, Optional
 class MainSubscription:
     def __init__(self):
         self.requests_sub_id = None
@@ -225,7 +225,7 @@ class NWCServiceProvider:
         await self._subscribe()
     
 
-    async def _handle_request(self, event):
+    async def _handle_request(self, event: Dict) -> List[Dict]:
         """
         Handle a nwc request
         """
@@ -263,15 +263,21 @@ class NWCServiceProvider:
                     "code": "INTERNAL",
                     "message": str(e)
                 })
+        sent_events = []
         for out in outs:
             # Finalize output
-            out["result_type"] = method
+            content = {}
+            content["result_type"] = method
+            if "result" in out:
+                content["result"] = out["result"]
+            if "error" in out:
+                content["error"] = out["error"]
             # Prepare response event
             res = {
                 "kind": 23195,
                 "created_at": int(time.time()),
                 "tags": out.get("tags", []),
-                "content": self._json_dumps(out),
+                "content": self._json_dumps(content),
             }
             # Reference request
             res["tags"].append(["e", event["id"]])
@@ -281,10 +287,12 @@ class NWCServiceProvider:
             res["content"] = self._encrypt_content(res["content"], nwc_pubkey)
             self._sign_event(res)
             # Register response for this request, so we knows it is not stale
-            self.sub.registerResponse(event["id"])
+            if self.sub: self.sub.registerResponse(event["id"])
             # Send response event
             await self._send(["EVENT", res])
-        
+            # Track sent events
+            sent_events.append(res)
+        return sent_events
  
     async def _on_message(self, ws, message: str):
         """
@@ -399,7 +407,7 @@ class NWCServiceProvider:
                 await asyncio.sleep(5)
 
 
-    def _encrypt_content(self, content: str, pubkey_hex:str) -> str:
+    def _encrypt_content(self, content: str, pubkey_hex:str, iv_seed: Optional[int]=None) -> str:
         """
         Encrypts the content for the given public key
 
@@ -415,7 +423,12 @@ class NWCServiceProvider:
         shared = pubkey.tweak_mul(bytes.fromhex(
             self.private_key_hex)).serialize()[1:]
         # random iv (16B)
-        iv = Random.new().read(AES.block_size)
+        if not iv_seed:
+            iv = Random.new().read(AES.block_size)
+        else:
+            iv = hashlib.sha256(iv_seed.to_bytes(32, byteorder='big')).digest()
+            iv = iv[:AES.block_size]
+
         aes = AES.new(shared, AES.MODE_CBC, iv)
 
         content_bytes = content.encode("utf-8")

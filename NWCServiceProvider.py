@@ -260,8 +260,10 @@ class NWCServiceProvider:
                     outs.append(out)
             except Exception as e:
                 outs.append({
-                    "code": "INTERNAL",
-                    "message": str(e)
+                    "error":{
+                        "code": "INTERNAL",
+                        "message": str(e)
+                    }
                 })
         sent_events = []
         for out in outs:

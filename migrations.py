@@ -24,7 +24,7 @@ async def m001_initial(db):
             pubkey TEXT NOT NULL, 
             amount_msats INTEGER NOT NULL,
             created_at INTEGER NOT NULL, 
-            FOREIGN KEY(pubkey)  REFERENCES keys(pubkey) ON DELETE CASCADE
+            FOREIGN KEY(pubkey)  REFERENCES {db.references_schema}keys(pubkey) ON DELETE CASCADE
         );
         """
     )
@@ -36,7 +36,7 @@ async def m001_initial(db):
             pubkey TEXT NOT NULL,  
             payload TEXT NOT NULL,
             created_at INTEGER NOT NULL, 
-            FOREIGN KEY(pubkey)  REFERENCES keys(pubkey) ON DELETE CASCADE
+            FOREIGN KEY(pubkey)  REFERENCES {db.references_schema}keys(pubkey) ON DELETE CASCADE
         );
         """
     )
@@ -49,7 +49,7 @@ async def m001_initial(db):
             budget_msats INTEGER NOT NULL,
             refresh_window INTEGER NOT NULL,
             created_at INTEGER NOT NULL, 
-            FOREIGN KEY(pubkey) REFERENCES keys(pubkey) ON DELETE CASCADE
+            FOREIGN KEY(pubkey) REFERENCES {db.references_schema}keys(pubkey) ON DELETE CASCADE
         );
         """
     )

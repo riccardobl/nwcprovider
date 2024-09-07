@@ -28,10 +28,11 @@ jobs:
 
       - name: Run unit tests
         run: |
-          cd lnbits
+          cdir=$(pwd)
+          cd $HOME/lnbits
           poetry_env_path=$(poetry env info --path)
           source $poetry_env_path/bin/activate
-          cd .. 
+          cd $cdir
           pytest tests/unit/*.py -s
 
       - name: Setup integration tests
@@ -39,8 +40,9 @@ jobs:
 
       - name: Run integration tests
         run: |
-          cd lnbits
+          cdir=$(pwd)
+          cd $HOME/lnbits
           poetry_env_path=$(poetry env info --path)
           source $poetry_env_path/bin/activate
-          cd .. 
+          cd $cdir
           pytest tests/integration/*.py -s

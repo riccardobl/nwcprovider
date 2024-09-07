@@ -7,15 +7,24 @@
 <div class="row q-col-gutter-md">
   <div class="col-12 col-md-8 col-lg-7 q-gutter-y-md">
     <q-card>
-      <q-card-section>
+      <q-card-section class="row q-gutter-x-md">
         <q-select
           v-model="selectedWallet"
           filled
           dense
           emit-value
+          map-options
           :options="g.user.walletOptions"
           label="Wallet *"
+          class="col"
         ></q-select>
+        <q-btn
+          v-if="this.g.user.admin"
+          @click="go('/nwcprovider/admin')"
+          aria-label="Settings"
+          icon="settings"
+          color="primary"
+        />
       </q-card-section>
     </q-card>
 
@@ -104,16 +113,6 @@
           >
             <q-icon name="swap_vertical_circle" class="q-mr-md"></q-icon>
             <q-item-section>Swagger API</q-item-section>
-          </q-item>
-          <q-separator></q-separator>
-          <q-item
-            v-if="this.g.user.admin"
-            clickable
-            @click="go('/nwcprovider/admin')"
-            class="q-flex items-center justify-between"
-          >
-            <q-icon name="settings" class="q-mr-md"></q-icon>
-            <q-item-section>Settings</q-item-section>
           </q-item>
         </q-list>
       </q-card-section>

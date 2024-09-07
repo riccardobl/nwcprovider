@@ -1,5 +1,6 @@
 import secp256k1
 
+
 async def m001_initial(db):
     """
     Initial tables
@@ -8,11 +9,11 @@ async def m001_initial(db):
         """
         CREATE TABLE nwcprovider.keys (
             pubkey TEXT PRIMARY KEY,
-            wallet TEXT NOT NULL, 
+            wallet TEXT NOT NULL,
             description TEXT NOT NULL,
-            expires_at INTEGER NOT NULL, 
+            expires_at INTEGER NOT NULL,
             permissions TEXT NOT NULL,
-            created_at INTEGER NOT NULL 
+            created_at INTEGER NOT NULL
         );
         """
     )
@@ -20,23 +21,27 @@ async def m001_initial(db):
     await db.execute(
         f"""
         CREATE TABLE nwcprovider.spent (
-            id {db.serial_primary_key}, 
-            pubkey TEXT NOT NULL, 
+            id {db.serial_primary_key},
+            pubkey TEXT NOT NULL,
             amount_msats INTEGER NOT NULL,
-            created_at INTEGER NOT NULL, 
-            FOREIGN KEY(pubkey)  REFERENCES {db.references_schema}keys(pubkey) ON DELETE CASCADE
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY(pubkey)
+            REFERENCES {db.references_schema}keys(pubkey)
+            ON DELETE CASCADE
         );
         """
     )
- 
+
     await db.execute(
-          f"""
+        f"""
         CREATE TABLE nwcprovider.logs (
-            id {db.serial_primary_key}, 
-            pubkey TEXT NOT NULL,  
+            id {db.serial_primary_key},
+            pubkey TEXT NOT NULL,
             payload TEXT NOT NULL,
-            created_at INTEGER NOT NULL, 
-            FOREIGN KEY(pubkey)  REFERENCES {db.references_schema}keys(pubkey) ON DELETE CASCADE
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY(pubkey)
+            REFERENCES {db.references_schema}keys(pubkey)
+            ON DELETE CASCADE
         );
         """
     )
@@ -48,12 +53,13 @@ async def m001_initial(db):
             pubkey TEXT NOT NULL,
             budget_msats INTEGER NOT NULL,
             refresh_window INTEGER NOT NULL,
-            created_at INTEGER NOT NULL, 
-            FOREIGN KEY(pubkey) REFERENCES {db.references_schema}keys(pubkey) ON DELETE CASCADE
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY(pubkey)
+            REFERENCES {db.references_schema}keys(pubkey)
+            ON DELETE CASCADE
         );
         """
     )
-
 
 
 async def m002_config(db):
@@ -69,6 +75,7 @@ async def m002_config(db):
         """
     )
 
+
 async def m003_default_config(db):
     """
     Default config
@@ -83,21 +90,20 @@ async def m003_default_config(db):
         """
         INSERT INTO nwcprovider.config (key, value) VALUES ('provider_key', ?);
         """,
-        (new_private_key,)
+        (new_private_key,),
     )
-
 
 
 async def m004_default_config2(db):
     """
     Default config
     """
-  
+
     await db.execute(
         """
         INSERT INTO nwcprovider.config (key, value) VALUES ('relay_alias', ?);
         """,
-        ('',)
+        ("",),
     )
 
 

@@ -1,101 +1,123 @@
 {% extends "base.html" %} {% from "macros.jinja" import window_vars with context
 %} {% block page %}
 <div class="row q-col-gutter-md" id="configTable">
-    <div class="col-12 q-gutter-y-md">
-        <q-card>
-            <q-card-section>
-                <div class="row items-center no-wrap q-mb-md">
-                    <div class="col">
-                        <h5 class="text-subtitle1 q-my-none">NWC Service Provider - Config</h5>
-                    </div>
-                </div>
-                <template>
-                    <q-markup-table flat>
-                        <tbody>
-                            <q-tr v-for="entry in entries" :key="entry.key">
-                                <q-td>
-                                    <span>
-                                        ${entry.key}
-                                    </span>
-                                </q-td>
-                                <q-td>
-                                    <q-input v-model="entry.value" />
-                                </q-td>
-                            </q-tr>
-                        </tbody>
-                    </q-markup-table>
-                </template>
-                <q-btn @click="saveConfig" unelevated label="Save" color="primary" class="q-mt-md full-width" />
-            </q-card-section>
-        </q-card>
-    </div>
+  <div class="col-12 q-gutter-y-md">
+    <q-card>
+      <q-card-section>
+        <div class="row items-center no-wrap q-mb-md">
+          <div class="col">
+            <h5 class="text-subtitle1 q-my-none">
+              NWC Service Provider - Config
+            </h5>
+          </div>
+        </div>
+        <template>
+          <q-markup-table flat>
+            <tbody>
+              <q-tr v-for="entry in entries" :key="entry.key">
+                <q-td>
+                  <span> ${entry.key} </span>
+                </q-td>
+                <q-td>
+                  <q-input v-model="entry.value" />
+                </q-td>
+              </q-tr>
+            </tbody>
+          </q-markup-table>
+        </template>
+        <q-btn
+          @click="saveConfig"
+          unelevated
+          label="Save"
+          color="primary"
+          class="q-mt-md full-width"
+        />
+      </q-card-section>
+    </q-card>
+  </div>
 </div>
 {% endblock %} {% block scripts %} {{ window_vars(user) }}
 <script>
+  new Vue({
+    el: "#vue",
+    mixins: [windowMixin],
+    delimiters: ["${", "}"],
+    data: function () {
+      return {
+        entries: [],
+        columns: [
+          {
+            name: "key",
+            required: true,
+            label: "Key",
+            align: "left",
+            field: (row) => row.key,
+            sortable: true,
+          },
+          {
+            name: "value",
+            required: true,
+            label: "Value",
+            align: "left",
+            field: (row) => row.value,
+            sortable: true,
+          },
+        ],
+      };
+    },
 
-
-    new Vue({
-        el: '#vue',
-        mixins: [windowMixin],
-        delimiters: ['${', '}'],
-        data: function () {
-            return {
-                entries: [],
-                columns: [
-                    { name: 'key', required: true, label: 'Key', align: 'left', field: row => row.key, sortable: true },
-                    { name: 'value', required: true, label: 'Value', align: 'left', field: row => row.value, sortable: true },
-                ]
-
+    methods: {
+      fetchConfig() {
+        this.entries = [];
+        LNbits.api
+          .request(
+            "GET",
+            "/nwcprovider/api/v1/config",
+            this.g.user.wallets[0].adminkey,
+          )
+          .then((response) => {
+            const newEntries = [];
+            for (const [key, value] of Object.entries(response.data)) {
+              newEntries.push({
+                key: key,
+                value: value,
+              });
             }
-        },
 
-
-        methods: {
-            fetchConfig() {
-                this.entries = [];
-                LNbits.api
-                    .request('GET', '/nwcprovider/api/v1/config', this.g.user.wallets[0].adminkey)
-                    .then((response) => {
-                        const newEntries = [];
-                        for (const [key, value] of Object.entries(response.data)) {
-                            newEntries.push({
-                                key: key,
-                                value: value,
-                            });
-                        }
-
-                        this.entries = newEntries;
-
-                    })
-                    .catch(function (error) {
-                        console.error("Error fetching config:", error);
-                    });
-            },
-            async saveConfig() {
-                const data = {};
-                for (const entry of this.entries) {
-                    data[entry.key] = entry.value;
-                }
-                try {
-                    const response = await LNbits.api
-                        .request('POST', '/nwcprovider/api/v1/config', this.g.user.wallets[0].adminkey, data)
-                    this.$q.notify({
-                        message: 'Config saved, please restart the server',
-                        color: 'positive',
-                        position: 'top',
-                        timeout: 2000,
-                        actions: [{ icon: 'close', color: 'white' }]
-                    })
-                } catch (error) {
-                    console.error("Error saving config:", error);
-                }
-
-            }
-        },
-
-        created: function () {
-            this.fetchConfig()
+            this.entries = newEntries;
+          })
+          .catch(function (error) {
+            console.error("Error fetching config:", error);
+          });
+      },
+      async saveConfig() {
+        const data = {};
+        for (const entry of this.entries) {
+          data[entry.key] = entry.value;
         }
-    })
+        try {
+          const response = await LNbits.api.request(
+            "POST",
+            "/nwcprovider/api/v1/config",
+            this.g.user.wallets[0].adminkey,
+            data,
+          );
+          this.$q.notify({
+            message: "Config saved, please restart the server",
+            color: "positive",
+            position: "top",
+            timeout: 2000,
+            actions: [{ icon: "close", color: "white" }],
+          });
+        } catch (error) {
+          console.error("Error saving config:", error);
+        }
+      },
+    },
+
+    created: function () {
+      this.fetchConfig();
+    },
+  });
 </script>
 {% endblock %}

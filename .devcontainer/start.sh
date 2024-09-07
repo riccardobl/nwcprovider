@@ -1,4 +1,4 @@
 #!/bin/bash
-ln -s $PWD/.devcontainer/.env ./lnbits/.env
-cd ./lnbits
+ln -s $PWD/.devcontainer/.env $HOME/lnbits/.env
+cd $HOME/lnbits
 poetry run lnbits

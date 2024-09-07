@@ -1,81 +1,90 @@
 import asyncio
+import base64
 import hashlib
 import json
-from typing import Dict
-import secp256k1
-from loguru import logger
-from lnbits.settings import settings
+import random
 import time
-import websockets
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Union
+
+import secp256k1
+import websockets.client as websockets
 from Cryptodome import Random
 from Cryptodome.Cipher import AES
-import base64
-import random
-from typing import Union, List, Callable, Tuple
-from lnbits.app import settings
-from lnbits.helpers import encrypt_internal_message
-from urllib.parse import quote
 from Cryptodome.Util.Padding import pad, unpad
-from typing import List, Dict, Optional
+from lnbits.helpers import encrypt_internal_message
+from lnbits.settings import settings
+from loguru import logger
+
+
 class MainSubscription:
     def __init__(self):
-        self.requests_sub_id = None
-        self.responses_sub_id = None
+        self.requests_sub_id: Optional[str] = None
+        self.responses_sub_id: Optional[str] = None
         self.requests_eose = False
         self.responses_eose = False
-        self.events:Dict[str, Dict] = {}
-        self.responses:List[str] = []
-    
-    def getStale(self) -> List[Dict]:
+        self.events: Dict[str, Dict] = {}
+        self.responses: List[str] = []
+
+    def get_stale(self) -> List[Dict]:
         """
         Get all the pending events that do not have a response yet.
         """
         pending_events = []
-        for [id, event] in self.events.items():
-            if not id in self.responses:
+        for [event_id, event] in self.events.items():
+            if event_id not in self.responses:
                 pending_events.append(event)
         return pending_events
-    
-    def registerResponse(self, event_id:str):
+
+    def register_response(self, event_id: str):
         """
         Register a response for a request event (not stale anymore)
         """
-        if not event_id in self.responses:
+        if event_id not in self.responses:
             self.responses.append(event_id)
 
 
 class NWCServiceProvider:
-    def __init__(self, private_key:str=None, relay:str=None):
-        if not relay: # Connect to nostrclient
+    def __init__(self, private_key: Optional[str] = None, relay: Optional[str] = None):
+        if not relay:  # Connect to nostrclient
             relay = "nostrclient"
         if relay == "nostrclient":
-            relay=f"ws://localhost:{settings.port}/nostrclient/api/v1/relay"
+            relay = f"ws://localhost:{settings.port}/nostrclient/api/v1/relay"
         elif relay == "nostrclient:private":
             relay_endpoint = encrypt_internal_message("relay")
-            relay=f"ws://localhost:{settings.port}/nostrclient/api/v1/{relay_endpoint}"
+            relay = (
+                f"ws://localhost:{settings.port}/nostrclient/api/v1/{relay_endpoint}"
+            )
         self.relay = relay
 
-        if not private_key: # Create random key
+        if not private_key:  # Create random key
             private_key = bytes.hex(secp256k1._gen_private_key())
-        
+
         self.private_key = secp256k1.PrivateKey(bytes.fromhex(private_key))
         self.private_key_hex = private_key
         self.public_key = self.private_key.pubkey
+        if not self.public_key:
+            raise Exception("Invalid public key")
         self.public_key_hex = self.public_key.serialize().hex()[2:]
 
         # List of supported methods
-        self.supported_methods = []
-        
+        self.supported_methods: List[str] = []
+
         # Keep track of the number of subscriptions (used for unique subid)
-        self.subscriptions_count = 0
+        self.subscriptions_count: int = 0
 
         # Request listeners, listen to specific methods
-        self.request_listeners = {}
+        self.request_listeners: Dict[
+            str,
+            Callable[
+                ["NWCServiceProvider", str, Dict],
+                Awaitable[List[Tuple[Optional[Dict], Optional[Dict], List]]],
+            ],
+        ] = {}
 
         # Reconnect task (if the connection is lost)
         self.reconnect_task = None
 
-        # Subscription 
+        # Subscription
         self.sub = None
 
         # websocket connection
@@ -83,30 +92,43 @@ class NWCServiceProvider:
 
         # if True the websocket is connected
         self.connected = False
-        
+
         # if True the instance is shutting down
         self.shutdown = False
 
-        logger.info("NWC Service is ready. relay: "+str(self.relay)+" pubkey: " +
-                    self.public_key_hex)
-        
-    def getSupportedMethods(self):
+        logger.info(
+            "NWC Service is ready. relay: "
+            + str(self.relay)
+            + " pubkey: "
+            + self.public_key_hex
+        )
+
+    def get_supported_methods(self):
         """
         Returns the list of supported methods by this service provider.
         """
         return self.supported_methods
 
-    def addRequestListener(self, method: str, l: Callable[["NWCServiceProvider", str, Dict], List[Tuple[Dict, Dict, List]]]):
+    def add_request_listener(
+        self,
+        method: str,
+        listener: Callable[
+            ["NWCServiceProvider", str, Dict],
+            Awaitable[List[Tuple[Optional[Dict], Optional[Dict], List]]],
+        ],
+    ):
         """
         Adds a request listener for a specific method.
 
         Args:
             method (str): The method name.
-            l (Callable[["NWCServiceProvider", str, Dict], List[Tuple[Dict, Dict]]]): The listener function
+            listener (Callable[
+                ["NWCServiceProvider", str, Dict], List[Tuple[Dict, Dict]]
+                ]): The listener function
         """
-        if not method in self.supported_methods:
+        if method not in self.supported_methods:
             self.supported_methods.append(method)
-        self.request_listeners[method] = l
+        self.request_listeners[method] = listener
 
     async def start(self):
         """
@@ -114,21 +136,19 @@ class NWCServiceProvider:
         """
         self.reconnect_task = asyncio.create_task(self._connect_to_relay())
 
-
     def _json_dumps(self, data: Union[Dict, list]) -> str:
         """
         Converts a Python dictionary to a JSON string with compact encoding.
 
         Args:
             data (Dict): The dictionary to be converted.
-        
+
         Returns:
             str: The compact JSON string.
         """
         if isinstance(data, Dict):
             data = {k: v for k, v in data.items() if v is not None}
-        return json.dumps(data, separators=(',', ':'), ensure_ascii=False)
-
+        return json.dumps(data, separators=(",", ":"), ensure_ascii=False)
 
     def _is_shutting_down(self) -> bool:
         """
@@ -136,21 +156,21 @@ class NWCServiceProvider:
         """
         return self.shutdown or not settings.lnbits_running
 
-
-    async def _send(self, data: Dict):
+    async def _send(self, data: List[Any]):
         """
         Sends data to the relay.
 
         Args:
             data (Dict): The data to be sent.
         """
+        if not self.ws:
+            raise Exception("Websocket connection is not established")
         if self._is_shutting_down():
             logger.warning("Trying to send data while shutting down")
             return
         await self._wait_for_connection()  # ensure the connection is established
         tx = self._json_dumps(data)
         await self.ws.send(tx)
-
 
     def _get_new_subid(self) -> str:
         """
@@ -159,16 +179,15 @@ class NWCServiceProvider:
         Returns:
             str: The generated 64 characters long subscription id (eg. lnbits0abc...)
         """
-        subid = "lnbitsnwcs"+str(self.subscriptions_count)
+        subid = "lnbitsnwcs" + str(self.subscriptions_count)
         self.subscriptions_count += 1
-        maxLength = 64
+        max_length = 64
         chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        n = maxLength - len(subid)
+        n = max_length - len(subid)
         if n > 0:
-            for i in range(n):
+            for _ in range(n):
                 subid += chars[random.randint(0, len(chars) - 1)]
         return subid
-
 
     async def _wait_for_connection(self):
         """
@@ -180,56 +199,52 @@ class NWCServiceProvider:
             logger.debug("Waiting for connection...")
             await asyncio.sleep(1)
 
-
     async def _subscribe(self):
         """
         [Re]Subscribe to receive nip 47 requests and responses from the relay
         """
-        self.sub = MainSubscription()        
+        self.sub = MainSubscription()
         # Create requests subscription
         req_filter = {
             "kinds": [23194],
             "#p": [self.public_key_hex],
             # Since the last 3 hours (handles reboots)
-            "since": int(time.time()) - 3*60*60
+            "since": int(time.time()) - 3 * 60 * 60,
         }
         self.sub.requests_sub_id = self._get_new_subid()
         # Create responses subscription (needed to track previosly responded requests)
         res_filter = {
             "kinds": [23195],
             "authors": [self.public_key_hex],
-            "since": int(time.time()) - 3*60*60
+            "since": int(time.time()) - 3 * 60 * 60,
         }
         self.sub.responses_sub_id = self._get_new_subid()
         # Subscribe
         await self._send(["REQ", self.sub.requests_sub_id, req_filter])
         await self._send(["REQ", self.sub.responses_sub_id, res_filter])
 
-
-    async def _on_connection(self,ws):
+    async def _on_connection(self, ws):
         """
-        On connection callback, announce the service provider methods and subscribe to nip67 events.
+        On connection callback, announce the service provider
+        methods and subscribe to nip67 events.
         """
         # Send info event
         event = {
             "kind": 13194,
             "content": " ".join(self.supported_methods),
             "created_at": int(time.time()),
-            "tags": [
-                ["p", self.public_key_hex]
-            ]
+            "tags": [["p", self.public_key_hex]],
         }
         self._sign_event(event)
         await self._send(["EVENT", event])
         # Resubscribe to nwc events
         await self._subscribe()
-    
 
     async def _handle_request(self, event: Dict) -> List[Dict]:
         """
         Handle a nwc request
         """
-        nwc_pubkey = event["pubkey"]        
+        nwc_pubkey = event["pubkey"]
         content = event["content"]
         # Decrypt the content
         content = self._decrypt_content(content, nwc_pubkey)
@@ -237,34 +252,30 @@ class NWCServiceProvider:
         content = json.loads(content)
         # Handle request
         method = content["method"]
-        l = self.request_listeners.get(method, None)
-        outs = []
-        if not l:
-            outs.append({
-                "error": {
-                    "code": "NOT_IMPLEMENTED",
-                    "message": "Method "+method+" is not implemented by this service provider"
+        listener = self.request_listeners.get(method, None)
+        outs: List[Dict[str, Any]] = []
+        if not listener:
+            outs.append(
+                {
+                    "error": {
+                        "code": "NOT_IMPLEMENTED",
+                        "message": "Method "
+                        + method
+                        + " is not implemented by this service provider",
+                    }
                 }
-            })
+            )
         else:
             try:
-                results = await l(self, nwc_pubkey, content)
+                results = await listener(self, nwc_pubkey, content)
                 for result in results:
                     r = result[0]
                     e = result[1]
                     t = result[2] if len(result) > 2 else None
-                    out = {}
-                    if r: out["result"] = r
-                    if e: out["error"] = e
-                    if t: out["tags"] = t
+                    out = {"result": r, "error": e, "tags": t}
                     outs.append(out)
             except Exception as e:
-                outs.append({
-                    "error":{
-                        "code": "INTERNAL",
-                        "message": str(e)
-                    }
-                })
+                outs.append({"error": {"code": "INTERNAL", "message": str(e)}})
         sent_events = []
         for out in outs:
             # Finalize output
@@ -275,7 +286,7 @@ class NWCServiceProvider:
             if "error" in out:
                 content["error"] = out["error"]
             # Prepare response event
-            res = {
+            res: Dict = {
                 "kind": 23195,
                 "created_at": int(time.time()),
                 "tags": out.get("tags", []),
@@ -286,16 +297,94 @@ class NWCServiceProvider:
             # Reference user
             res["tags"].append(["p", nwc_pubkey])
             # Finalize response event
+            print(res)
             res["content"] = self._encrypt_content(res["content"], nwc_pubkey)
             self._sign_event(res)
+
             # Register response for this request, so we knows it is not stale
-            if self.sub: self.sub.registerResponse(event["id"])
+            if self.sub:
+                self.sub.register_response(event["id"])
             # Send response event
             await self._send(["EVENT", res])
             # Track sent events
             sent_events.append(res)
         return sent_events
- 
+
+    async def _on_event_message(self, msg):
+        if not self.sub:
+            return
+        sub_id = msg[1]
+        event = msg[2]
+        # Ensure the event is valid (do not trust relays)
+        if not self._verify_event(event):
+            raise Exception("Invalid event signature")
+        tags = event["tags"]
+        expiration = int(next((tag for tag in tags if tag[0] == "expiration"), -1))
+        # Handle event expiration if the relay doesn't support nip 40
+        if expiration > 0 and expiration < int(time.time()):
+            logger.debug("Event expired")
+            return
+        if event["kind"] == 23194 and sub_id == self.sub.requests_sub_id:
+            # Ensure the request is for this service provider
+            valid_p = any(
+                tag[0] == "p" and tag[1] == self.public_key_hex for tag in tags
+            )
+            if not valid_p:
+                raise Exception("Unexpected request from another service")
+            # Track request
+            self.sub.events[event["id"]] = event
+            # if eose was received for both subscriptions, we handle the request
+            # in realtime if not, we do nothing since the request may be
+            # already handled or stale, all stale requests will be handled
+            # later when eose is received
+            if self.sub.requests_eose and self.sub.responses_eose:
+                await self._handle_request(event)
+        elif event["kind"] == 23195 and sub_id == self.sub.responses_sub_id:
+            # Ensure the response is from this service provider
+            if event["pubkey"] != self.public_key_hex:
+                raise Exception("Unexpected response from another service")
+            # Register as response for each e tag (request event id)
+            # Note: usually we expect only one "e" tag, but we are handling
+            # multiple "e" tags just in case
+            etag = next((tag[1] for tag in tags if tag[0] == "e"), None)
+            if etag:
+                self.sub.register_response(etag)
+
+    async def _on_eose_message(self, msg):
+        if not self.sub:
+            return
+        sub_id = msg[1]
+        # Track EOSE
+        if sub_id == self.sub.requests_sub_id:
+            self.sub.requests_eose = True
+        elif sub_id == self.sub.responses_sub_id:
+            self.sub.responses_eose = True
+        # When both EOSE are receives, handle all the stale requests
+        #   Note: All the requests that were received prior to the
+        #         service connection and do not have a response yet,
+        #         are considered stale, we will process them now
+        if self.sub.requests_eose and self.sub.responses_eose:
+            stales = self.sub.get_stale()
+            for stale in stales:
+                await self._handle_request(stale)
+
+    async def _on_closed_message(self, msg):
+        if not self.sub:
+            return
+        # Subscription was closed remotely.
+        sub_id = msg[1]
+        info = msg[2] or "" if len(msg) > 2 else ""
+        # Resubscribe if one of the main subscriptions was closed
+        if sub_id == self.sub.requests_sub_id or sub_id == self.sub.responses_sub_id:
+            logger.warning(
+                "Subscription "
+                + sub_id
+                + " was closed remotely: "
+                + info
+                + " ... resubscribing..."
+            )
+            await self._subscribe()
+
     async def _on_message(self, ws, message: str):
         """
         Handle incoming messages from the relay.
@@ -303,113 +392,63 @@ class NWCServiceProvider:
         try:
             msg = json.loads(message)
             if msg[0] == "EVENT":  # Event message
-                sub_id = msg[1]
-                event = msg[2]
-                # Ensure the event is valid (do not trust relays)
-                if not self._verify_event(event):
-                    raise Exception("Invalid event signature")                                
-                tags = event["tags"]          
-                expiration = -1
-                for tag in tags:
-                    if tag[0] == "expiration":
-                        expiration = int(tag[1])
-                        break
-                # Handle event expiration if the relay doesn't support nip 40
-                if expiration > 0 and expiration < int(time.time()):
-                    logger.debug("Event expired")      
-                    return 
-                if event["kind"] == 23194 and sub_id == self.sub.requests_sub_id:
-                    # Ensure the request is for this service provider
-                    valid_p = False
-                    for tag in tags:
-                        if tag[0] == "p" and tag[1] == self.public_key_hex:
-                            valid_p = True
-                            break
-                    if not valid_p:
-                        raise Exception("Unexpected request from another service")
-                    # Track request
-                    self.sub.events[event["id"]] = event
-                    # if eose was received for both subscriptions, we handle the request in realtime
-                    # if not, we do nothing since the request may be already handled or stale,
-                    # all stale requests will be handled later when eose is received
-                    if self.sub.requests_eose and self.sub.responses_eose:
-                        await self._handle_request(event)
-                elif event["kind"] == 23195 and sub_id == self.sub.responses_sub_id:
-                    # Ensure the response is from this service provider
-                    if event["pubkey"] != self.public_key_hex:
-                        raise Exception("Unexpected response from another service")
-                    # Register as response for each e tag (request event id)
-                    # Note: usually we expect only one "e" tag, but we are handling multiple "e" tags just in case
-                    for tag in tags:
-                        if tag[0] == "e":
-                            self.sub.registerResponse(tag[1])
-            elif msg[0] == "EOSE":            
-                sub_id = msg[1]
-                # Track EOSE                
-                if sub_id == self.sub.requests_sub_id:
-                    self.sub.requests_eose = True
-                elif sub_id == self.sub.responses_sub_id:
-                    self.sub.responses_eose = True
-                # When both EOSE are receives, handle all the stale requests
-                #   Note: All the requests that were received prior to the service connection
-                #   and do not have a response yet, are considered stale, we will process them now
-                if self.sub.requests_eose and self.sub.responses_eose:
-                    stales = self.sub.getStale()
-                    for stale in stales:
-                        await self._handle_request(stale)
+                await self._on_event_message(msg)
+            elif msg[0] == "EOSE":
+                await self._on_eose_message(msg)
             elif msg[0] == "CLOSED":
-                # Subscription was closed remotely.
-                sub_id = msg[1]
-                info = msg[2] or "" if len(msg) > 2 else ""
-                # Resubscribe if one of the main subscriptions was closed
-                if sub_id == self.sub.requests_sub_id or sub_id == self.sub.responses_sub_id:
-                    logger.warning("Subscription "+sub_id+" was closed remotely: "+info+" ... resubscribing...")
-                    self._subscribe()
+                await self._on_closed_message(msg)
             elif msg[0] == "NOTICE":
                 # A message from the relay, mostly useless, but we log it anyway
-                logger.info("Notice from relay "+self.relay+": "+str(msg[1]))
+                logger.info("Notice from relay " + self.relay + ": " + str(msg[1]))
             elif msg[0] == "OK":
                 pass
             else:
                 raise Exception("Unknown message type")
         except Exception as e:
-            logger.error("Error parsing event: "+str(e))
-
+            logger.error("Error parsing event: " + str(e))
 
     async def _connect_to_relay(self):
         """
         Initiate websocket connection to the relay.
         """
-        await asyncio.sleep(1)  
-        logger.debug("Connecting to NWC relay "+self.relay)
-        while not self._is_shutting_down():  # Reconnect until the instance is shutting down
-            logger.debug('Creating new connection...')
+        await asyncio.sleep(1)
+        logger.debug("Connecting to NWC relay " + self.relay)
+        while (
+            not self._is_shutting_down()
+        ):  # Reconnect until the instance is shutting down
+            logger.debug("Creating new connection...")
             try:
                 async with websockets.connect(self.relay) as ws:
                     self.ws = ws
                     self.connected = True
                     await self._on_connection(ws)
-                    while not self._is_shutting_down():  # receive messages until the instance is shutting down
+                    while (
+                        not self._is_shutting_down()
+                    ):  # receive messages until the instance is shutting down
                         try:
                             reply = await ws.recv()
+                            if isinstance(reply, bytes):
+                                reply = reply.decode("utf-8")
                             await self._on_message(ws, reply)
                         except Exception as e:
                             logger.debug("Error receiving message: " + str(e))
                             break
                 logger.debug("Connection to NWC relay closed")
             except Exception as e:
-                logger.error("Error connecting to NWC relay: "+str(e))
+                logger.error("Error connecting to NWC relay: " + str(e))
                 await asyncio.sleep(5)
             # the connection was closed, so we set the connected flag to False
-            # this will make the methods calling _wait_for_connection() to wait until the connection is re-established
+            # this will make the methods calling _wait_for_connection() to wait
+            # until the connection is re-established
             self.connected = False
             if not self._is_shutting_down():
                 # Wait some time before reconnecting
                 logger.debug("Reconnecting to NWC relay in 5 seconds...")
                 await asyncio.sleep(5)
 
-
-    def _encrypt_content(self, content: str, pubkey_hex:str, iv_seed: Optional[int]=None) -> str:
+    def _encrypt_content(
+        self, content: str, pubkey_hex: str, iv_seed: Optional[int] = None
+    ) -> str:
         """
         Encrypts the content for the given public key
 
@@ -420,16 +459,14 @@ class NWCServiceProvider:
         Returns:
             str: The encrypted content.
         """
-        pubkey = secp256k1.PublicKey(
-            bytes.fromhex("02" + pubkey_hex), True)        
-        shared = pubkey.tweak_mul(bytes.fromhex(
-            self.private_key_hex)).serialize()[1:]
+        pubkey = secp256k1.PublicKey(bytes.fromhex("02" + pubkey_hex), True)
+        shared = pubkey.tweak_mul(bytes.fromhex(self.private_key_hex)).serialize()[1:]
         # random iv (16B)
         if not iv_seed:
             iv = Random.new().read(AES.block_size)
         else:
-            iv = hashlib.sha256(iv_seed.to_bytes(32, byteorder='big')).digest()
-            iv = iv[:AES.block_size]
+            iv = hashlib.sha256(iv_seed.to_bytes(32, byteorder="big")).digest()
+            iv = iv[: AES.block_size]
 
         aes = AES.new(shared, AES.MODE_CBC, iv)
 
@@ -438,14 +475,12 @@ class NWCServiceProvider:
         # padding
         content_bytes = pad(content_bytes, AES.block_size)
 
-        encrypted_b64 = base64.b64encode(
-            aes.encrypt(content_bytes)).decode("ascii")
-        ivB64 = base64.b64encode(iv).decode("ascii")
-        encrypted_content = encrypted_b64 + "?iv=" + ivB64
+        encrypted_b64 = base64.b64encode(aes.encrypt(content_bytes)).decode("ascii")
+        iv_b64 = base64.b64encode(iv).decode("ascii")
+        encrypted_content = encrypted_b64 + "?iv=" + iv_b64
         return encrypted_content
 
-
-    def _decrypt_content(self, content: str , pubkey_hex:str) -> str:
+    def _decrypt_content(self, content: str, pubkey_hex: str) -> str:
         """
         Decrypts the content for the given public key
 
@@ -456,15 +491,12 @@ class NWCServiceProvider:
         Returns:
             str: The decrypted content.
         """
-        pubkey = secp256k1.PublicKey(
-            bytes.fromhex("02" + pubkey_hex), True)
+        pubkey = secp256k1.PublicKey(bytes.fromhex("02" + pubkey_hex), True)
 
-        shared = pubkey.tweak_mul(bytes.fromhex(
-            self.private_key_hex)).serialize()[1:]
+        shared = pubkey.tweak_mul(bytes.fromhex(self.private_key_hex)).serialize()[1:]
         # extract iv and content
         (encrypted_content_b64, iv_b64) = content.split("?iv=")
-        encrypted_content = base64.b64decode(
-            encrypted_content_b64.encode("ascii"))
+        encrypted_content = base64.b64decode(encrypted_content_b64.encode("ascii"))
         iv = base64.b64decode(iv_b64.encode("ascii"))
         # Decrypt
         aes = AES.new(shared, AES.MODE_CBC, iv)
@@ -472,7 +504,6 @@ class NWCServiceProvider:
         decrypted_bytes = unpad(decrypted_bytes, AES.block_size)
         decrypted = decrypted_bytes.decode("utf-8")
         return decrypted
-
 
     def _verify_event(self, event: Dict) -> bool:
         """
@@ -484,27 +515,30 @@ class NWCServiceProvider:
         Returns:
             bool: True if the event signature is valid, False otherwise.
         """
-        signature_data = self._json_dumps([
-            0,
-            event["pubkey"],
-            event["created_at"],
-            event["kind"],
-            event["tags"],
-            event["content"]
-        ])
+        signature_data = self._json_dumps(
+            [
+                0,
+                event["pubkey"],
+                event["created_at"],
+                event["kind"],
+                event["tags"],
+                event["content"],
+            ]
+        )
         event_id = hashlib.sha256(signature_data.encode()).hexdigest()
         if event_id != event["id"]:  # Invalid event id
             return False
-        pubkeyHex = event["pubkey"]
-        pubkey = secp256k1.PublicKey(bytes.fromhex("02" + pubkeyHex), True)
-        if not pubkey.schnorr_verify(bytes.fromhex(event_id), bytes.fromhex(event["sig"]), None, raw=True):
+        pubkey_hex = event["pubkey"]
+        pubkey = secp256k1.PublicKey(bytes.fromhex("02" + pubkey_hex), True)
+        if not pubkey.schnorr_verify(
+            bytes.fromhex(event_id), bytes.fromhex(event["sig"]), None, raw=True
+        ):
             return False
         return True
 
-
     def _sign_event(self, event: Dict) -> Dict:
         """
-        Signs the event (in place) 
+        Signs the event (in place)
 
         Args:
             event (Dict): The event to be signed.
@@ -512,24 +546,26 @@ class NWCServiceProvider:
         Returns:
             Dict: The input event with the signature added.
         """
-        signature_data = self._json_dumps([
-            0,
-            self.public_key_hex,
-            event["created_at"],
-            event["kind"],
-            event["tags"],
-            event["content"]
-        ])
+        signature_data = self._json_dumps(
+            [
+                0,
+                self.public_key_hex,
+                event["created_at"],
+                event["kind"],
+                event["tags"],
+                event["content"],
+            ]
+        )
 
         event_id = hashlib.sha256(signature_data.encode()).hexdigest()
         event["id"] = event_id
         event["pubkey"] = self.public_key_hex
 
-        signature = (self.private_key.schnorr_sign(
-            bytes.fromhex(event_id), None, raw=True)).hex()
+        signature = (
+            self.private_key.schnorr_sign(bytes.fromhex(event_id), None, raw=True)
+        ).hex()
         event["sig"] = signature
         return event
-    
 
     async def cleanup(self):
         logger.debug("Closing NWC Service Provider connection")
@@ -539,10 +575,10 @@ class NWCServiceProvider:
             if self.reconnect_task:
                 self.reconnect_task.cancel()
         except Exception as e:
-            logger.warning("Error closing reconnection task: "+str(e))
+            logger.warning("Error closing reconnection task: " + str(e))
         # close the websocket
         try:
             if self.ws:
                 await self.ws.close()
         except Exception as e:
-            logger.warning("Error closing websocket connection: "+str(e))
+            logger.warning("Error closing websocket connection: " + str(e))

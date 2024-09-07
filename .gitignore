@@ -2,3 +2,7 @@ __pycache__
 lnbits
 tests/integration/strfry-data
 tests/integration/lnbits_itest_data
+node_modules
+.pytest_cache
+.ruff_cache
+.mypy_cache

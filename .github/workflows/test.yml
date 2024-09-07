@@ -4,45 +4,43 @@ on:
   push:
   pull_request:
 
-
 jobs:
   test:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v2
 
-    - name: Set up Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: '3.9'
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: "3.9"
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install poetry
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install poetry
 
-    - name: Run setup script
-      run: |
-        /bin/bash .devcontainer/setup.sh ${{ github.workspace }}
+      - name: Run setup script
+        run: |
+          /bin/bash .devcontainer/setup.sh ${{ github.workspace }}
 
+      - name: Run unit tests
+        run: |
+          cd lnbits
+          poetry_env_path=$(poetry env info --path)
+          source $poetry_env_path/bin/activate
+          cd .. 
+          pytest tests/unit/*.py -s
 
-    - name: Run unit tests
-      run: |
-        cd lnbits
-        poetry_env_path=$(poetry env info --path)
-        source $poetry_env_path/bin/activate
-        cd .. 
-        pytest tests/unit/*.py -s
+      - name: Setup integration tests
+        run: bash tests/integration/start.sh
 
-    - name: Setup integration tests
-      run: bash tests/integration/start.sh
-
-    - name: Run integration tests
-      run: |
-        cd lnbits
-        poetry_env_path=$(poetry env info --path)
-        source $poetry_env_path/bin/activate
-        cd .. 
-        pytest tests/unit/*.py -s
+      - name: Run integration tests
+        run: |
+          cd lnbits
+          poetry_env_path=$(poetry env info --path)
+          source $poetry_env_path/bin/activate
+          cd .. 
+          pytest tests/integration/*.py -s

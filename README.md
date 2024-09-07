@@ -12,11 +12,11 @@ Configure the extension from the "Settings" page in the top right menu when logg
 
 ### Configuration Options:
 
-| Key           | Description                                                                                                                        | Default                        |
-|---------------|------------------------------------------------------------------------------------------------------------------------------------|--------------------------------|
-| relay         | URL of the nostr relay for dispatching and receiving NWC events. Use public relays or a custom one. Specify `nostrclient` to connect to the [nostrclient extension](https://github.com/lnbits/nostrclient). | nostrclient                    |
-| provider_key  | Nostr secret key of the NWC Service Provider.                                                                                      | Random key generated on install |
-| relay_alias   | Relay URL to display in pairing URLs. Set if different from `relay`.                                                               | Empty (uses the `relay` value)  |
+| Key          | Description                                                                                                                                                                                                 | Default                         |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| relay        | URL of the nostr relay for dispatching and receiving NWC events. Use public relays or a custom one. Specify `nostrclient` to connect to the [nostrclient extension](https://github.com/lnbits/nostrclient). | nostrclient                     |
+| provider_key | Nostr secret key of the NWC Service Provider.                                                                                                                                                               | Random key generated on install |
+| relay_alias  | Relay URL to display in pairing URLs. Set if different from `relay`.                                                                                                                                        | Empty (uses the `relay` value)  |
 
 ### Using Nostrclient
 

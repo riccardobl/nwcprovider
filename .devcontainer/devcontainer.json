@@ -20,7 +20,6 @@
       "settings": {
         "python.analysis.extraPaths": ["/home/vscode/lnbits"],
         "python.pythonPath": "/home/vscode/python"
-        // "python.pythonPath": "/opt/python/bin/python3.9"
       }
     }
   },

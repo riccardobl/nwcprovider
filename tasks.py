@@ -18,8 +18,6 @@ from lnbits.wallets.base import PaymentStatus
 from loguru import logger
 
 from .crud import get_config_nwc, get_nwc, tracked_spend_nwc
-
-# from .crud import  log_nwc
 from .execution_queue import execution_queue
 from .models import NWCKey
 from .nwcp import NWCServiceProvider

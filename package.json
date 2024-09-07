@@ -1,8 +1,0 @@
-{
-  "name": "nwcprovider",
-  "version": "1.0.0",
-  "dependencies": {
-    "prettier": "^3.3.3",
-    "pyright": "^1.1.379"
-  }
-}

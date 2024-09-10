@@ -34,20 +34,6 @@ async def m001_initial(db):
 
     await db.execute(
         f"""
-        CREATE TABLE nwcprovider.logs (
-            id {db.serial_primary_key},
-            pubkey TEXT NOT NULL,
-            payload TEXT NOT NULL,
-            created_at INTEGER NOT NULL,
-            FOREIGN KEY(pubkey)
-            REFERENCES {db.references_schema}keys(pubkey)
-            ON DELETE CASCADE
-        );
-        """
-    )
-
-    await db.execute(
-        f"""
         CREATE TABLE nwcprovider.budgets (
             id {db.serial_primary_key},
             pubkey TEXT NOT NULL,

@@ -1,9 +1,9 @@
 import asyncio
 
 from fastapi import APIRouter
+from lnbits.tasks import create_permanent_unique_task
 from loguru import logger
 
-from lnbits.tasks import create_permanent_unique_task
 from .crud import db
 from .tasks import handle_execution_queue, handle_nwc
 from .views import nwcprovider_router
@@ -24,6 +24,7 @@ nwcprovider_static_files = [
 
 scheduled_tasks: list[asyncio.Task] = []
 
+
 def nwcprovider_stop():
     for task in scheduled_tasks:
         try:
@@ -39,6 +40,7 @@ def nwcprovider_start():
         "ext_nwcprovider_execution_queue", handle_execution_queue
     )
     scheduled_tasks.append(task)
+
 
 __all__ = [
     "db",

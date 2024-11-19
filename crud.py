@@ -5,17 +5,18 @@ from lnbits.db import Database
 
 from .execution_queue import enqueue
 from .models import (
-    NWCBudget, 
-    NWCKey, 
-    CreateNWCKey, 
-    GetNWCKey, 
-    GetWalletNWC, 
-    GetBudgetsNWC, 
+    CreateNWCKey,
+    DeleteNWC,
+    GetBudgetsNWC,
+    GetNWCKey,
+    GetWalletNWC,
+    NWCBudget,
+    NWCKey,
     TrackedSpendNWC,
-    DeleteNWC
 )
 
 db = Database("ext_nwcprovider")
+
 
 async def create_nwc(data: CreateNWCKey) -> NWCKey:
     nwckey_entry = NWCKey(
@@ -34,39 +35,47 @@ async def create_nwc(data: CreateNWCKey) -> NWCKey:
                 pubkey=data.pubkey,
                 budget_msats=budget.budget_msats,
                 refresh_window=budget.refresh_window,
-                created_at=budget.created_at
+                created_at=budget.created_at,
             )
             await db.insert("nwcprovider.budgets", budget_entry)
     return NWCKey(**data.dict())
 
-async def delete_nwc(data:DeleteNWC) -> None:
+
+async def delete_nwc(data: DeleteNWC) -> None:
     await db.execute(
-        "DELETE FROM nwcprovider.keys WHERE pubkey = :pubkey AND wallet = :wallet", {"pubkey": data.pubkey, "wallet": data.wallet_id}
+        "DELETE FROM nwcprovider.keys WHERE pubkey = :pubkey AND wallet = :wallet",
+        {"pubkey": data.pubkey, "wallet": data.wallet_id},
     )
+
 
 async def get_wallet_nwcs(data: GetWalletNWC) -> List[NWCKey]:
     return await db.fetchall(
         """
-        SELECT * FROM nwcprovider.keys 
+        SELECT * FROM nwcprovider.keys
         WHERE wallet = :wallet AND (expires_at = 0 OR expires_at > :expires)
-        """, 
-        {"wallet": data.wallet_id, "expires": int(time.time()) if not data.include_expired else -1},
+        """,
+        {
+            "wallet": data.wallet_id,
+            "expires": int(time.time()) if not data.include_expired else -1,
+        },
         model=NWCKey,
     )
 
-async def get_nwc(
-    data: GetNWCKey
-) -> Optional[NWCKey]:
+
+async def get_nwc(data: GetNWCKey) -> Optional[NWCKey]:
     # expires_at = 0 means it never expires
     if data.wallet_id:
         row = await db.fetchone(
             """
-            SELECT * FROM nwcprovider.keys 
-            WHERE pubkey = :pubkey AND wallet = :wallet 
+            SELECT * FROM nwcprovider.keys
+            WHERE pubkey = :pubkey AND wallet = :wallet
             AND (expires_at = 0 OR expires_at > :expires)
             """,
-            {"pubkey": data.pubkey, "wallet": data.wallet_id, 
-             "expires": int(time.time()) if not data.include_expired else -1},
+            {
+                "pubkey": data.pubkey,
+                "wallet": data.wallet_id,
+                "expires": int(time.time()) if not data.include_expired else -1,
+            },
             NWCKey,
         )
     else:
@@ -79,10 +88,13 @@ async def get_nwc(
         )
         row = await db.fetchone(
             """
-            SELECT * FROM nwcprovider.keys 
+            SELECT * FROM nwcprovider.keys
             WHERE pubkey = :pubkey AND (expires_at = 0 OR expires_at > :expires)
             """,
-            {"pubkey": data.pubkey, "expires": int(time.time()) if not data.include_expired else -1},
+            {
+                "pubkey": data.pubkey,
+                "expires": int(time.time()) if not data.include_expired else -1,
+            },
             NWCKey,
         )
     if not row:
@@ -90,16 +102,18 @@ async def get_nwc(
     if data.refresh_last_used:
         await db.execute(
             """
-            UPDATE nwcprovider.keys SET last_used = :last_used WHERE pubkey = :pubkey
+            UPDATE nwcprovider.keys SET last_used =
+            :last_used WHERE pubkey = :pubkey
             """,
-            {"last_used":int(time.time()), "pubkey":data.pubkey},
+            {"last_used": int(time.time()), "pubkey": data.pubkey},
         )
     return NWCKey(**row)
 
 
 async def get_budgets_nwc(data: GetBudgetsNWC) -> Optional[NWCBudget]:
     rows = await db.fetchall(
-        "SELECT * FROM nwcprovider.budgets WHERE pubkey = :pubkey", {"pubkey":data.pubkey}
+        "SELECT * FROM nwcprovider.budgets WHERE pubkey = :pubkey",
+        {"pubkey": data.pubkey},
     )
     budgets = [NWCBudget(**row) for row in rows]
     if data.calculate_spent:
@@ -108,16 +122,21 @@ async def get_budgets_nwc(data: GetBudgetsNWC) -> Optional[NWCBudget]:
             tot_spent_in_range_msats = await db.fetchone(
                 """
                 SELECT SUM(amount_msats) FROM nwcprovider.spent
-                WHERE pubkey = :pubkey AND created_at >= :last_cycle AND created_at < next_cycle
+                WHERE pubkey = :pubkey AND created_at >=
+                :last_cycle AND created_at < next_cycle
                 """,
-                {"pubkey":data.pubkey, "last_cycle":last_cycle, "next_cycle":next_cycle},
+                {
+                    "pubkey": data.pubkey,
+                    "last_cycle": last_cycle,
+                    "next_cycle": next_cycle,
+                },
             )
             tot_spent_in_range_msats = tot_spent_in_range_msats[0] or 0
             budget.used_budget_msats = tot_spent_in_range_msats
     return budgets
 
 
-async def tracked_spend_nwc(data:TrackedSpendNWC, action):
+async def tracked_spend_nwc(data: TrackedSpendNWC, action):
     async def r():
         created_at = int(time.time())
         budgets = await get_budgets_nwc(data.pubkey)
@@ -129,9 +148,14 @@ async def tracked_spend_nwc(data:TrackedSpendNWC, action):
                     await db.fetchone(
                         """
                         SELECT SUM(amount_msats) FROM nwcprovider.spent
-                        WHERE pubkey = :pubkey AND created_at >= :last_cycle AND created_at < :next_cycle
+                        WHERE pubkey = :pubkey AND created_at >=
+                        :last_cycle AND created_at < :next_cycle
                         """,
-                        {"pubkey":data.pubkey, "last_cycle":last_cycle, "next_cycle":next_cycle},
+                        {
+                            "pubkey": data.pubkey,
+                            "last_cycle": last_cycle,
+                            "next_cycle": next_cycle,
+                        },
                     )
                 )[0]
                 or 0
@@ -147,7 +171,11 @@ async def tracked_spend_nwc(data:TrackedSpendNWC, action):
             INSERT INTO nwcprovider.spent (pubkey, amount_msats, created_at)
             VALUES (:pubkey, :amount_msats, :created_at)
             """,
-            {"pubkey":data.pubkey, "amount_msats":data.amount_msats, "created_at":created_at},
+            {
+                "pubkey": data.pubkey,
+                "amount_msats": data.amount_msats,
+                "created_at": created_at,
+            },
         )
         return True, out
 
@@ -155,10 +183,13 @@ async def tracked_spend_nwc(data:TrackedSpendNWC, action):
 
 
 async def get_config_nwc(key: str):
-    row = await db.fetchone("SELECT * FROM nwcprovider.config WHERE key = :key", {"key":key})
+    row = await db.fetchone(
+        "SELECT * FROM nwcprovider.config WHERE key = :key", {"key": key}
+    )
     if not row:
         return None
     return row["value"]
+
 
 async def set_config_nwc(key: str, value: str):
     await db.execute(
@@ -166,15 +197,16 @@ async def set_config_nwc(key: str, value: str):
         DELETE FROM nwcprovider.config
         WHERE key = :key
         """,
-        {"key":key},
+        {"key": key},
     )
     await db.execute(
         """
         INSERT INTO nwcprovider.config (key, value)
         VALUES (:key, :value)
         """,
-        {"key":key, "value":value},
+        {"key": key, "value": value},
     )
+
 
 async def get_all_config_nwc():
     rows = await db.fetchall("SELECT * FROM nwcprovider.config")

@@ -5,7 +5,6 @@ import json
 import random
 import time
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Union
-from pydantic import BaseModel
 
 import secp256k1
 import websockets.client as websockets
@@ -15,6 +14,8 @@ from Cryptodome.Util.Padding import pad, unpad
 from lnbits.helpers import encrypt_internal_message
 from lnbits.settings import settings
 from loguru import logger
+from pydantic import BaseModel
+
 
 class MainSubscription(BaseModel):
     class Config:
@@ -49,6 +50,7 @@ class MainSubscription(BaseModel):
 class NWCServiceProvider(BaseModel):
     class Config:
         arbitrary_types_allowed = True
+
     def __init__(self, private_key: Optional[str] = None, relay: Optional[str] = None):
         if not relay:  # Connect to nostrclient
             relay = "nostrclient"

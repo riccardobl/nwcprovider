@@ -16,6 +16,11 @@ from lnbits.settings import settings
 from loguru import logger
 
 
+class RateLimit:
+    backoff: int = 0
+    last_attempt_time: int = 0
+
+
 class MainSubscription:
     def __init__(self):
         self.requests_sub_id: Optional[str] = None
@@ -86,8 +91,8 @@ class NWCServiceProvider:
 
         # Subscription
         self.sub = None
-        self.rate_limit = {}
-        
+        self.rate_limit: Dict[str, RateLimit] = {}
+
         # websocket connection
         self.ws = None
 
@@ -200,28 +205,22 @@ class NWCServiceProvider:
             logger.debug("Waiting for connection...")
             await asyncio.sleep(1)
 
-    async def _ratelimit(self, unit, max_sleep_time = 120):
-        rate_limit = self.rate_limit.get(unit)
-        if not rate_limit:
-            self.rate_limit[unit] = rate_limit = {
-                "backoff": 0,
-                "last_attempt_time": 0
-            }
+    async def _ratelimit(self, unit: str, max_sleep_time: int = 120) -> None:
+        limit: Optional[RateLimit] = self.rate_limit.get(unit)
+        if not limit:
+            self.rate_limit[unit] = limit = RateLimit()
 
-        if time.time() - rate_limit["last_attempt_time"] > max_sleep_time:
+        if time.time() - limit.last_attempt_time > max_sleep_time:
             # reset backoff if action lasted more than max_sleep_time
-            rate_limit["backoff"] = 0
+            limit.backoff = 0
         else:
             # increase backoff
-            rate_limit["backoff"] = (
-                min(rate_limit["backoff"] * 2, max_sleep_time)
-                if rate_limit["backoff"] > 0
-                else 1
+            limit.backoff = (
+                min(limit.backoff * 2, max_sleep_time) if limit.backoff > 0 else 1
             )
-        logger.debug(
-            "Sleeping for " + str(rate_limit["backoff"]) + " seconds before " + unit)
-        await asyncio.sleep( rate_limit["backoff"])
-        rate_limit["last_attempt_time"] = time.time()
+        logger.debug("Sleeping for " + str(limit.backoff) + " seconds before " + unit)
+        await asyncio.sleep(limit.backoff)
+        limit.last_attempt_time = int(time.time())
 
     async def _subscribe(self):
         """

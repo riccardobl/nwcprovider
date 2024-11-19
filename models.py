@@ -5,7 +5,7 @@ from sqlite3 import Row
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
-
+from .nwcp import NWCServiceProvider
 
 class NWCKey(BaseModel):
     pubkey: str
@@ -32,7 +32,11 @@ class GetNWCKey(BaseModel):
     include_expired: Optional[bool] = False
     refresh_last_used: Optional[bool] = False
 
-class GetWalletNWCKey(BaseModel):
+class GetNWCs(BaseModel):
+    include_expired: bool = False
+    calculate_spent_budget: bool = False
+
+class GetWalletNWC(BaseModel):
     wallet_id: Optional[str] = None
     include_expired: Optional[bool] = False
 
@@ -46,7 +50,12 @@ class TrackedSpendNWC(BaseModel):
 
 class DeleteNWC(BaseModel):
     pubkey: str
-    wallet_id: str
+    wallet_id: Optional[str] = None
+
+class OnInvoicePaid(BaseModel):
+    sp: NWCServiceProvider
+    pubkey: str
+    payload: Dict
 
 class NWCBudget(BaseModel):
     id: int
@@ -96,6 +105,9 @@ class NWCRegistrationRequest(BaseModel):
     expires_at: int
     budgets: List[NWCNewBudget]
 
+class RegisterNWC(BaseModel):
+    pubkey: str
+    registration_data: NWCRegistrationRequest
 
 class NWCGetResponse(BaseModel):
     data: NWCKey

@@ -9,7 +9,7 @@ from .models import (
     NWCKey, 
     CreateNWCKey, 
     GetNWCKey, 
-    GetWalletNWCKey, 
+    GetWalletNWC, 
     GetBudgetsNWC, 
     TrackedSpendNWC,
     DeleteNWC
@@ -44,7 +44,7 @@ async def delete_nwc(data:DeleteNWC) -> None:
         "DELETE FROM nwcprovider.keys WHERE pubkey = :pubkey AND wallet = :wallet", {"pubkey": data.pubkey, "wallet": data.wallet_id}
     )
 
-async def get_wallet_nwcs(data: GetWalletNWCKey) -> List[NWCKey]:
+async def get_wallet_nwcs(data: GetWalletNWC) -> List[NWCKey]:
     return await db.fetchall(
         """
         SELECT * FROM nwcprovider.keys 

@@ -17,7 +17,15 @@ from .crud import (
     get_wallet_nwcs,
     set_config_nwc,
 )
-from .models import NWCGetResponse, NWCRegistrationRequest
+from .models import (
+    NWCGetResponse, 
+    RegisterNWC, 
+    GetWalletNWC,
+    GetBudgetsNWC,
+    GetNWCKey,
+    GetNWCs,
+    DeleteNWC
+)
 from .permission import nwc_permissions
 
 nwcprovider_api_router = APIRouter()
@@ -26,7 +34,6 @@ nwcprovider_api_router = APIRouter()
 # Get supported permissions
 @nwcprovider_api_router.get("/api/v1/permissions", status_code=HTTPStatus.OK)
 async def api_get_permissions(
-    req: Request,
     wallet: WalletTypeInfo = Depends(require_admin_key),
 ) -> Dict:
     return nwc_permissions
@@ -37,17 +44,23 @@ async def api_get_permissions(
     "/api/v1/nwc", status_code=HTTPStatus.OK, response_model=List[NWCGetResponse]
 )
 async def api_get_nwcs(
-    req: Request,
-    include_expired: bool = False,
-    calculate_spent_budget: bool = False,
+    data: GetNWCs,
     wallet: WalletTypeInfo = Depends(require_admin_key),
 ):
 
     wallet_id = wallet.wallet.id
-    nwcs = await get_wallet_nwcs(wallet_id, include_expired)
+    wallet_nwcs = GetWalletNWC(
+        wallet_id=wallet_id, 
+        include_expired=data.include_expired
+        )
+    nwcs = await get_wallet_nwcs(wallet_nwcs)
     out = []
     for nwc in nwcs:
-        budgets = await get_budgets_nwc(nwc.pubkey, calculate_spent_budget)
+        budgets_nwc = GetBudgetsNWC(
+            pubkey=nwc.pubkey, 
+            calculate_spent=data.calculate_spent_budget
+            )
+        budgets = await get_budgets_nwc(budgets_nwc)
         res = NWCGetResponse(data=nwc, budgets=budgets)
         out.append(res)
     return out
@@ -58,16 +71,14 @@ async def api_get_nwcs(
     "/api/v1/nwc/{pubkey}", status_code=HTTPStatus.OK, response_model=NWCGetResponse
 )
 async def api_get_nwc(
-    req: Request,
-    pubkey: str,
-    include_expired: Optional[bool] = False,
-    wallet: WalletTypeInfo = Depends(require_admin_key),
-) -> NWCGetResponse:
+    data:GetNWCKey,
+    wallet: WalletTypeInfo = Depends(require_admin_key)
+    ) -> NWCGetResponse:
     wallet_id = wallet.wallet.id
-    nwc = await get_nwc(pubkey, wallet_id, include_expired)
+    nwc = await get_nwc(data.pubkey, wallet_id, data.include_expired)
     if not nwc:
         raise Exception("Pubkey has no associated wallet")
-    res = NWCGetResponse(data=nwc, budgets=await get_budgets_nwc(pubkey))
+    res = NWCGetResponse(data=nwc, budgets=await get_budgets_nwc(data.pubkey))
     return res
 
 
@@ -115,21 +126,19 @@ async def api_get_pairing_url(req: Request, secret: str) -> str:
     response_model=NWCGetResponse,
 )
 async def api_register_nwc(
-    req: Request,
-    pubkey: str,
-    registration_data: NWCRegistrationRequest,  # Use the Pydantic model here
+    data:RegisterNWC,  # Use the Pydantic model here
     wallet: WalletTypeInfo = Depends(require_admin_key),
 ):
     wallet_id = wallet.wallet.id
     nwc = await create_nwc(
-        pubkey,
+        data.pubkey,
         wallet_id,
-        registration_data.description,
-        registration_data.expires_at,
-        registration_data.permissions,
-        registration_data.budgets,
+        data.registration_data.description,
+        data.registration_data.expires_at,
+        data.registration_data.permissions,
+        data.registration_data.budgets,
     )
-    budgets = await get_budgets_nwc(pubkey)
+    budgets = await get_budgets_nwc(data.pubkey)
     res = NWCGetResponse(data=nwc, budgets=budgets)
     return res
 
@@ -137,20 +146,18 @@ async def api_register_nwc(
 # Delete a nwc key
 @nwcprovider_api_router.delete("/api/v1/nwc/{pubkey}", status_code=HTTPStatus.OK)
 async def api_delete_nwc(
-    req: Request, pubkey: str, wallet: WalletTypeInfo = Depends(require_admin_key)
+    data:DeleteNWC, wallet: WalletTypeInfo = Depends(require_admin_key)
 ):
     wallet_id = wallet.wallet.id
-    await delete_nwc(pubkey, wallet_id)
-    return JSONResponse(content={"message": f"NWC key {pubkey} deleted successfully."})
+    await delete_nwc(data.pubkey, wallet_id)
+    return JSONResponse(content={"message": f"NWC key {data.pubkey} deleted successfully."})
 
 
 # Get config
 @nwcprovider_api_router.get(
     "/api/v1/config", status_code=HTTPStatus.OK, dependencies=[Depends(check_admin)]
 )
-async def api_get_all_config_nwc(
-    req: Request,
-):
+async def api_get_all_config_nwc():
     config = await get_all_config_nwc()
     return config
 
@@ -161,7 +168,7 @@ async def api_get_all_config_nwc(
     status_code=HTTPStatus.OK,
     dependencies=[Depends(check_admin)],
 )
-async def api_get_config_nwc(req: Request, key: str):
+async def api_get_config_nwc(key: str):
     config = await get_config_nwc(key)
     out = {}
     out[key] = config

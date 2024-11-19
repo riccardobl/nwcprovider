@@ -615,7 +615,7 @@
         try {
           const response = await LNbits.api.request(
             "GET",
-            "/nwcprovider/api/v1/nwc?includeExpired=true&calculateSpendBudget=true",
+            "/nwcprovider/api/v1/nwc?include_expired=true&calculate_spent_budget=true",
             wallet.adminkey,
           );
           this.nwcs = response.data;

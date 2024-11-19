@@ -5,6 +5,7 @@ import json
 import random
 import time
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Union
+from pydantic import BaseModel
 
 import secp256k1
 import websockets.client as websockets
@@ -15,6 +16,8 @@ from lnbits.helpers import encrypt_internal_message
 from lnbits.settings import settings
 from loguru import logger
 
+class Config:
+    arbitrary_types_allowed = True
 
 class MainSubscription:
     def __init__(self):

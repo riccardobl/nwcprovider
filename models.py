@@ -26,6 +26,27 @@ class NWCKey(BaseModel):
     def from_row(cls, row: Dict[str, Any]) -> "NWCKey":
         return cls(**row)
 
+class GetNWCKey(BaseModel):
+    pubkey: str
+    wallet_id: Optional[str] = None
+    include_expired: Optional[bool] = False
+    refresh_last_used: Optional[bool] = False
+
+class GetWalletNWCKey(BaseModel):
+    wallet_id: Optional[str] = None
+    include_expired: Optional[bool] = False
+
+class GetBudgetsNWC(BaseModel):
+    pubkey: str
+    calculate_spent: Optional[bool] = False
+
+class TrackedSpendNWC(BaseModel):
+    pubkey: str
+    amount_msats: int
+
+class DeleteNWC(BaseModel):
+    pubkey: str
+    wallet_id: str
 
 class NWCBudget(BaseModel):
     id: int

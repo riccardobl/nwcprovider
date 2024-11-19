@@ -81,7 +81,7 @@ class NWCServiceProvider:
         self.request_listeners: Dict[
             str,
             Callable[
-                ["NWCServiceProvider", str, Dict],
+                [NWCServiceProvider, str, Dict],
                 Awaitable[List[Tuple[Optional[Dict], Optional[Dict], List]]],
             ],
         ] = {}

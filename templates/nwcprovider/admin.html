@@ -38,7 +38,7 @@
 </div>
 {% endblock %} {% block scripts %} {{ window_vars(user) }}
 <script>
-  new Vue({
+  window.app = Vue.createApp({
     el: "#vue",
     mixins: [windowMixin],
     delimiters: ["${", "}"],

@@ -62,6 +62,8 @@ class DeleteNWC(BaseModel):
 
 
 class OnInvoicePaid(BaseModel):
+    class Config:
+        arbitrary_types_allowed = True
     sp: NWCServiceProvider
     pubkey: str
     payload: Dict

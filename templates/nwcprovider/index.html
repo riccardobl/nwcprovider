@@ -46,10 +46,10 @@
         <q-table
           dense
           flat
-          :data="nwcEntries"
+          :rows="nwcEntries"
           row-key="id"
           :columns="nwcsTable.columns"
-          :pagination.sync="nwcsTable.pagination"
+          v-model:pagination="nwcsTable.pagination"
         >
           <nwcprovider v-slot:header="props">
             <q-tr :props="props">
@@ -407,8 +407,8 @@
   window.NobleSecp256k1 = NobleSecp256k1;
 </script>
 <script>
-  new Vue({
-    el: "#vue",
+window.app = Vue.createApp({
+  el: '#vue',
     mixins: [windowMixin],
     delimiters: ["${", "}"],
     data: function () {

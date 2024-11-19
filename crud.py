@@ -4,72 +4,31 @@ from typing import List, Optional
 from lnbits.db import Database
 
 from .execution_queue import enqueue
-from .models import NWCBudget, NWCKey, NWCNewBudget
+from .models import NWCBudget, NWCKey, CreateNWCKey
 
 db = Database("ext_nwcprovider")
 
-
-async def create_nwc(
-    pubkey: str,
-    wallet_id: str,
-    description: str,
-    expires_at: int,
-    permissions: List[str],
-    budgets: Optional[List[NWCNewBudget]] = None,
-) -> NWCKey:
-    # Check if the key already exists
-    if await get_nwc(pubkey, None, True):
-        raise Exception("Public key already used")
-    # If not, create it
-    now = int(time.time())
-    await db.execute(
-        """
-        INSERT INTO nwcprovider.keys (
-            pubkey,
-            wallet,
-            description,
-            permissions,
-            created_at,
-            expires_at,
-            last_used
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            pubkey,
-            wallet_id,
-            description,
-            " ".join(permissions),
-            now,
-            int(expires_at) if expires_at else 0,
-            now,
-        ),
+async def create_nwc(data: CreateNWCKey) -> NWCKey:
+    nwckey_entry = NWCKey(
+        pubkey=data.pubkey,
+        wallet=data.wallet_id,
+        description=data.description,
+        expires_at=int(data.expires_at) if data.expires_at else 0,
+        permissions=" ".join(data.permissions),
+        created_at=int(time.time()),
+        last_used=int(time.time()),
     )
-    # Add budgets
-    if budgets:
-        for budget in budgets:
-            await db.execute(
-                """
-                INSERT INTO nwcprovider.budgets (
-                    pubkey,
-                    budget_msats,
-                    refresh_window,
-                    created_at
-                )
-                VALUES (?, ?, ?, ?)
-                """,
-                (pubkey, budget.budget_msats, budget.refresh_window, budget.created_at),
+    await db.insert("nwcprovider.keys", nwckey_entry)
+    if data.budgets:
+        for budget in data.budgets:
+            budget_entry = NWCKey(
+                pubkey=data.pubkey,
+                budget_msats=budget.budget_msats,
+                refresh_window=budget.refresh_window,
+                created_at=budget.created_at
             )
-    # Return the created key
-    return NWCKey(
-        pubkey=pubkey,
-        wallet=wallet_id,
-        description=description,
-        expires_at=expires_at,
-        permissions=" ".join(permissions),
-        created_at=now,
-        last_used=now,
-    )
+            await db.insert("nwcprovider.budgets", budget_entry)
+    return NWCKey(**data.dict())
 
 
 async def delete_nwc(pubkey: str, wallet_id: str):

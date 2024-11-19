@@ -2,7 +2,7 @@
 
 import time
 from sqlite3 import Row
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
@@ -79,3 +79,11 @@ class NWCRegistrationRequest(BaseModel):
 class NWCGetResponse(BaseModel):
     data: NWCKey
     budgets: List[NWCBudget]
+
+class CreateNWCKey(BaseModel):
+    pubkey: str
+    wallet_id: str
+    description: str
+    expires_at: int
+    permissions: List[str]
+    budgets: Optional[List[NWCNewBudget]] = None

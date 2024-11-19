@@ -74,9 +74,9 @@ async def m003_default_config(db):
     new_private_key = bytes.hex(secp256k1._gen_private_key())
     await db.execute(
         """
-        INSERT INTO nwcprovider.config (key, value) VALUES ('provider_key', ?);
+        INSERT INTO nwcprovider.config (key, value) VALUES ('provider_key', :provider_key);
         """,
-        (new_private_key,),
+        {"provider_key": new_private_key},
     )
 
 

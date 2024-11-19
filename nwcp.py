@@ -18,9 +18,6 @@ from pydantic import BaseModel
 
 
 class MainSubscription(BaseModel):
-    class Config:
-        arbitrary_types_allowed = True
-
     def __init__(self):
         self.requests_sub_id: Optional[str] = None
         self.responses_sub_id: Optional[str] = None
@@ -46,11 +43,11 @@ class MainSubscription(BaseModel):
         if event_id not in self.responses:
             self.responses.append(event_id)
 
-
-class NWCServiceProvider(BaseModel):
     class Config:
         arbitrary_types_allowed = True
 
+
+class NWCServiceProvider(BaseModel):
     def __init__(self, private_key: Optional[str] = None, relay: Optional[str] = None):
         if not relay:  # Connect to nostrclient
             relay = "nostrclient"
@@ -589,3 +586,6 @@ class NWCServiceProvider(BaseModel):
                 await self.ws.close()
         except Exception as e:
             logger.warning("Error closing websocket connection: " + str(e))
+
+    class Config:
+        arbitrary_types_allowed = True

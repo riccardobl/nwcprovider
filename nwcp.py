@@ -16,10 +16,10 @@ from lnbits.helpers import encrypt_internal_message
 from lnbits.settings import settings
 from loguru import logger
 
-class Config:
-    arbitrary_types_allowed = True
+class MainSubscription(BaseModel):
+    class Config:
+        arbitrary_types_allowed = True
 
-class MainSubscription:
     def __init__(self):
         self.requests_sub_id: Optional[str] = None
         self.responses_sub_id: Optional[str] = None
@@ -46,7 +46,9 @@ class MainSubscription:
             self.responses.append(event_id)
 
 
-class NWCServiceProvider:
+class NWCServiceProvider(BaseModel):
+    class Config:
+        arbitrary_types_allowed = True
     def __init__(self, private_key: Optional[str] = None, relay: Optional[str] = None):
         if not relay:  # Connect to nostrclient
             relay = "nostrclient"

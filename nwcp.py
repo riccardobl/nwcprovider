@@ -86,7 +86,8 @@ class NWCServiceProvider:
 
         # Subscription
         self.sub = None
-
+        self.rate_limit = {}
+        
         # websocket connection
         self.ws = None
 
@@ -198,6 +199,29 @@ class NWCServiceProvider:
                 raise Exception("Connection is closing")
             logger.debug("Waiting for connection...")
             await asyncio.sleep(1)
+
+    async def _ratelimit(self, unit, max_sleep_time = 120):
+        rate_limit = self.rate_limit.get(unit)
+        if not rate_limit:
+            self.rate_limit[unit] = rate_limit = {
+                "backoff": 0,
+                "last_attempt_time": 0
+            }
+
+        if time.time() - rate_limit["last_attempt_time"] > max_sleep_time:
+            # reset backoff if action lasted more than max_sleep_time
+            rate_limit["backoff"] = 0
+        else:
+            # increase backoff
+            rate_limit["backoff"] = (
+                min(rate_limit["backoff"] * 2, max_sleep_time)
+                if rate_limit["backoff"] > 0
+                else 1
+            )
+        logger.debug(
+            "Sleeping for " + str(rate_limit["backoff"]) + " seconds before " + unit)
+        await asyncio.sleep( rate_limit["backoff"])
+        rate_limit["last_attempt_time"] = time.time()
 
     async def _subscribe(self):
         """
@@ -383,6 +407,7 @@ class NWCServiceProvider:
                 + info
                 + " ... resubscribing..."
             )
+            await self._ratelimit("subscribing")
             await self._subscribe()
 
     async def _on_message(self, ws, message: str):
@@ -403,7 +428,7 @@ class NWCServiceProvider:
             elif msg[0] == "OK":
                 pass
             else:
-                raise Exception("Unknown message type")
+                raise Exception("Unknown message type " + str(msg[0]))
         except Exception as e:
             logger.error("Error parsing event: " + str(e))
 
@@ -443,8 +468,8 @@ class NWCServiceProvider:
             self.connected = False
             if not self._is_shutting_down():
                 # Wait some time before reconnecting
-                logger.debug("Reconnecting to NWC relay in 5 seconds...")
-                await asyncio.sleep(5)
+                logger.debug("Reconnecting to NWC relay...")
+                await self._ratelimit("connecting")
 
     def _encrypt_content(
         self, content: str, pubkey_hex: str, iv_seed: Optional[int] = None

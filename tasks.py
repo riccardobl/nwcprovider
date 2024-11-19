@@ -106,8 +106,8 @@ async def _process_invoice(
 
 
 async def _on_pay_invoice(
-        data:OnInvoicePaid
-        ) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
+    data: OnInvoicePaid,
+) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
     nwc = await get_nwc(data.pubkey, None, False, True)
     error = await _check(nwc, "pay_invoice", data.payload)
     if error:
@@ -136,7 +136,7 @@ async def _on_pay_invoice(
 
 
 async def _on_multi_pay_invoice(
-    data:OnInvoicePaid
+    data: OnInvoicePaid,
 ) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
     nwc = await get_nwc(data.pubkey, None, False, True)
     error = await _check(nwc, "multi_pay_invoice", data.payload)
@@ -161,7 +161,7 @@ async def _on_multi_pay_invoice(
             invoice_data = bolt11_decode(invoice)
             amount_msats = int(invoice_data.amount_msat or 0)
             res = await _process_invoice(
-                nwc.wallet, pubkey, invoice, amount_msats, invoice_data.description
+                nwc.wallet, data.pubkey, invoice, amount_msats, invoice_data.description
             )
             error = res.get("error")
             if error:
@@ -182,7 +182,7 @@ async def _on_multi_pay_invoice(
 
 
 async def _on_make_invoice(
-    data:OnInvoicePaid
+    data: OnInvoicePaid,
 ) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
     nwc = await get_nwc(data.pubkey, None, False, True)
     error = await _check(nwc, "make_invoice", data.payload)
@@ -234,7 +234,7 @@ async def _on_make_invoice(
 
 
 async def _on_lookup_invoice(
-    data:OnInvoicePaid
+    data: OnInvoicePaid,
 ) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
     nwc = await get_nwc(data.pubkey, None, False, True)
     error = await _check(nwc, "lookup_invoice", data.payload)
@@ -281,7 +281,7 @@ async def _on_lookup_invoice(
 
 
 async def _on_list_transactions(
-    data:OnInvoicePaid
+    data: OnInvoicePaid,
 ) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
     nwc = await get_nwc(data.pubkey, None, False, True)
     error = await _check(nwc, "list_transactions", data.payload)
@@ -337,7 +337,7 @@ async def _on_list_transactions(
 
 
 async def _on_get_balance(
-    data:OnInvoicePaid
+    data: OnInvoicePaid,
 ) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
     nwc = await get_nwc(data.pubkey, None, False, True)
     error = await _check(nwc, "get_balance", data.payload)
@@ -355,7 +355,7 @@ async def _on_get_balance(
 
 
 async def _on_get_info(
-    data:OnInvoicePaid
+    data: OnInvoicePaid,
 ) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
     nwc = await get_nwc(data.pubkey, None, False, True)
     error = await _check(nwc, "get_info", data.payload)
@@ -363,7 +363,7 @@ async def _on_get_info(
         return [(None, error, [])]
     if not nwc:
         raise Exception("Pubkey has no associated wallet")
-    sp_methods = sp.get_supported_methods()
+    sp_methods = data.sp.get_supported_methods()
     permissions = nwc.get_permissions()
     # Filter only methods supported by the extension and allowed by the permissions
     account_methods = []

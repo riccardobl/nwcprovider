@@ -17,7 +17,12 @@ from loguru import logger
 from pydantic import BaseModel
 
 
-class MainSubscription(BaseModel):
+class RateLimit:
+    backoff: int = 0
+    last_attempt_time: int = 0
+
+
+class MainSubscription:
     def __init__(self):
         self.requests_sub_id: Optional[str] = None
         self.responses_sub_id: Optional[str] = None
@@ -90,6 +95,7 @@ class NWCServiceProvider(BaseModel):
 
         # Subscription
         self.sub = None
+        self.rate_limit: Dict[str, RateLimit] = {}
 
         # websocket connection
         self.ws = None
@@ -202,6 +208,23 @@ class NWCServiceProvider(BaseModel):
                 raise Exception("Connection is closing")
             logger.debug("Waiting for connection...")
             await asyncio.sleep(1)
+
+    async def _ratelimit(self, unit: str, max_sleep_time: int = 120) -> None:
+        limit: Optional[RateLimit] = self.rate_limit.get(unit)
+        if not limit:
+            self.rate_limit[unit] = limit = RateLimit()
+
+        if time.time() - limit.last_attempt_time > max_sleep_time:
+            # reset backoff if action lasted more than max_sleep_time
+            limit.backoff = 0
+        else:
+            # increase backoff
+            limit.backoff = (
+                min(limit.backoff * 2, max_sleep_time) if limit.backoff > 0 else 1
+            )
+        logger.debug("Sleeping for " + str(limit.backoff) + " seconds before " + unit)
+        await asyncio.sleep(limit.backoff)
+        limit.last_attempt_time = int(time.time())
 
     async def _subscribe(self):
         """
@@ -387,6 +410,7 @@ class NWCServiceProvider(BaseModel):
                 + info
                 + " ... resubscribing..."
             )
+            await self._ratelimit("subscribing")
             await self._subscribe()
 
     async def _on_message(self, ws, message: str):
@@ -407,7 +431,7 @@ class NWCServiceProvider(BaseModel):
             elif msg[0] == "OK":
                 pass
             else:
-                raise Exception("Unknown message type")
+                raise Exception("Unknown message type " + str(msg[0]))
         except Exception as e:
             logger.error("Error parsing event: " + str(e))
 
@@ -447,8 +471,8 @@ class NWCServiceProvider(BaseModel):
             self.connected = False
             if not self._is_shutting_down():
                 # Wait some time before reconnecting
-                logger.debug("Reconnecting to NWC relay in 5 seconds...")
-                await asyncio.sleep(5)
+                logger.debug("Reconnecting to NWC relay...")
+                await self._ratelimit("connecting")
 
     def _encrypt_content(
         self, content: str, pubkey_hex: str, iv_seed: Optional[int] = None

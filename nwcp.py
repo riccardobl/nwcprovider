@@ -52,7 +52,7 @@ class MainSubscription:
         arbitrary_types_allowed = True
 
 
-class NWCServiceProvider(BaseModel):
+class NWCServiceProvider:
     def __init__(self, private_key: Optional[str] = None, relay: Optional[str] = None):
         if not relay:  # Connect to nostrclient
             relay = "nostrclient"

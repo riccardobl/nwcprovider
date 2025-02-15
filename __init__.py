@@ -32,7 +32,7 @@ def nwcprovider_stop():
         except Exception as ex:
             logger.warning(ex)
 
-
+logger.debug("NWC Service Provider extension loaded")
 def nwcprovider_start():
     task = create_permanent_unique_task("ext_nwcprovider", handle_nwc)
     scheduled_tasks.append(task)

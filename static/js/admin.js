@@ -43,8 +43,8 @@ window.app = Vue.createApp({
                 value: value,
               });
             }
-
-            this.entries = newEntries;
+            this.entries.length = 0;
+            this.entries.push(...newEntries);
           })
           .catch(function (error) {
             console.error("Error fetching config:", error);
@@ -62,14 +62,19 @@ window.app = Vue.createApp({
             this.g.user.wallets[0].adminkey,
             data,
           );
-          this.$q.notify({
-            message: "Config saved, please restart the server",
-            color: "positive",
-            position: "top",
-            timeout: 2000,
-            actions: [{ icon: "close", color: "white" }],
+          Quasar.Notify.create({
+            type: 'positive',
+            message: 'Config saved!',
           });
+          Quasar.Notify.create({
+            type: 'warning',
+            message: 'You need to restart the server for the changes to take effect!',
+          });          
         } catch (error) {
+          Quasar.Notify.create({
+            type: 'negative',
+            message: "Error saving config: "+String(error),
+          })
           console.error("Error saving config:", error);
         }
       },

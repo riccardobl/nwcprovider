@@ -66,9 +66,9 @@
       showConnectDialog() {
         const wallet = this.getWallet();
         if (!wallet) {
-          this.$q.notify({
-            color: "red",
-            message: "Please select a wallet first",
+          Quasar.Notify.create({
+            type: 'negative',
+            message: 'Please select a wallet first',
           });
           return;
         } else {
@@ -94,12 +94,15 @@
         if (url) {
           try {
             await navigator.clipboard.writeText(url);
-            this.$q.notify({
-              color: "primary",
-              message: "URL copied to clipboard!",
+            Quasar.Notify.create({
+              type: "positive",
+              message: "URL copied to clipboard"
             });
           } catch (err) {
-            this.$q.notify({ color: "red", message: "Failed to copy URL." });
+            Quasar.Notify.create({
+              type: "negative",
+              message: "Failed to copy URL."
+            });
           }
         }
       },
@@ -168,8 +171,8 @@
         return out;
       },
       deleteNWC: async function (pubkey) {
-        this.$q
-          .dialog({
+        Quasar
+          .Dialog.create({
             title: "Confirm Deletion",
             message: "Are you sure you want to delete this connection?",
             cancel: true,
@@ -184,9 +187,9 @@
                 wallet.adminkey,
               );
               this.loadNwcs();
-              this.$q.notify({
+              Quasar.Notify.create({
                 type: "positive",
-                message: "Deleted successfully",
+                message: "Deleted successfully"
               });
             } catch (error) {
               LNbits.utils.notifyApiError(error);
@@ -233,18 +236,18 @@
         this.loadConnectDialogData();
         const newTableEntries = [];
         for (const nwc of this.nwcs) {
-          const t = Quasar.utils.date.formatDate(
+          const t = Quasar.date.formatDate(
             new Date(nwc.data.created_at * 1000),
             "YYYY-MM-DD HH:mm",
           );
           const e =
             nwc.data.expires_at > 0
-              ? Quasar.utils.date.formatDate(
+              ? Quasar.date.formatDate(
                   new Date(nwc.data.expires_at * 1000),
                   "YYYY-MM-DD HH:mm",
                 )
               : "Never";
-          const l = Quasar.utils.date.formatDate(
+          const l = Quasar.date.formatDate(
             new Date(nwc.data.last_used * 1000),
             "YYYY-MM-DD HH:mm",
           );
@@ -265,7 +268,7 @@
             nwcTableEntry.status = "Expired";
           }
           for (const budget of nwc.budgets) {
-            const createdAt = Quasar.utils.date.formatDate(
+            const createdAt = Quasar.date.formatDate(
               new Date(budget.created_at * 1000),
               "YYYY-MM-DD HH:mm",
             );

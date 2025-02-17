@@ -13,20 +13,18 @@
             </h5>
           </div>
         </div>
-        <template>
-          <q-markup-table flat>
-            <tbody>
-              <q-tr v-for="entry in entries" :key="entry.key">
-                <q-td>
-                  <span> ${entry.key} </span>
-                </q-td>
-                <q-td>
-                  <q-input v-model="entry.value" />
-                </q-td>
-              </q-tr>
-            </tbody>
-          </q-markup-table>
-        </template>
+        <q-markup-table flat>
+          <tbody>
+            <q-tr v-for="entry in entries" :key="entry.key">
+              <q-td>
+                <span> ${entry.key} </span>
+              </q-td>
+              <q-td>
+                <q-input v-model="entry.value" />
+              </q-td>
+            </q-tr>
+          </tbody>
+        </q-markup-table>
         <q-btn
           @click="saveConfig"
           unelevated

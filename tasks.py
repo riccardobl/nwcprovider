@@ -19,7 +19,7 @@ from loguru import logger
 
 from .crud import get_config_nwc, get_nwc, tracked_spend_nwc
 from .execution_queue import execution_queue
-from .models import NWCKey, OnInvoicePaid
+from .models import NWCKey, OnInvoicePaid, TrackedSpendNWC, GetNWC
 from .nwcp import NWCServiceProvider
 from .permission import nwc_permissions
 
@@ -66,7 +66,10 @@ async def _process_invoice(
     payment_hash = None
     try:
         in_budget, payment_hash = await tracked_spend_nwc(
-            pubkey, amount_msats, execute_payment
+            TrackedSpendNWC(
+                pubkey=pubkey, 
+                amount_msats=amount_msats
+            ), execute_payment
         )
         if not in_budget:
             error = {
@@ -108,7 +111,10 @@ async def _process_invoice(
 async def _on_pay_invoice(
     data: OnInvoicePaid,
 ) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
-    nwc = await get_nwc(data.pubkey, None, False, True)
+    nwc = await get_nwc(GetNWC(
+        pubkey=data.pubkey, 
+        refresh_last_used=True
+    ))
     error = await _check(nwc, "pay_invoice", data.payload)
     if error:
         return [(None, error, [])]
@@ -138,7 +144,7 @@ async def _on_pay_invoice(
 async def _on_multi_pay_invoice(
     data: OnInvoicePaid,
 ) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
-    nwc = await get_nwc(data.pubkey, None, False, True)
+    nwc = await get_nwc(GetNWC(pubkey=data.pubkey, refresh_last_used=True))
     error = await _check(nwc, "multi_pay_invoice", data.payload)
     if error:
         return [(None, error, [])]
@@ -184,7 +190,7 @@ async def _on_multi_pay_invoice(
 async def _on_make_invoice(
     data: OnInvoicePaid,
 ) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
-    nwc = await get_nwc(data.pubkey, None, False, True)
+    nwc = await get_nwc(GetNWC(pubkey=data.pubkey, refresh_last_used=True))
     error = await _check(nwc, "make_invoice", data.payload)
     if error:
         return [(None, error, [])]
@@ -236,7 +242,7 @@ async def _on_make_invoice(
 async def _on_lookup_invoice(
     data: OnInvoicePaid,
 ) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
-    nwc = await get_nwc(data.pubkey, None, False, True)
+    nwc = await get_nwc(GetNWC(pubkey=data.pubkey, refresh_last_used=True))
     error = await _check(nwc, "lookup_invoice", data.payload)
     if error:
         return [(None, error, [])]
@@ -283,7 +289,7 @@ async def _on_lookup_invoice(
 async def _on_list_transactions(
     data: OnInvoicePaid,
 ) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
-    nwc = await get_nwc(data.pubkey, None, False, True)
+    nwc = await get_nwc(GetNWC(pubkey=data.pubkey, refresh_last_used=True))
     error = await _check(nwc, "list_transactions", data.payload)
     if error:
         return [(None, error, [])]
@@ -339,7 +345,7 @@ async def _on_list_transactions(
 async def _on_get_balance(
     data: OnInvoicePaid,
 ) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
-    nwc = await get_nwc(data.pubkey, None, False, True)
+    nwc = await get_nwc(GetNWC(pubkey=data.pubkey, refresh_last_used= True))
     error = await _check(nwc, "get_balance", data.payload)
     if error:
         return [(None, error, [])]
@@ -357,7 +363,7 @@ async def _on_get_balance(
 async def _on_get_info(
     data: OnInvoicePaid,
 ) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
-    nwc = await get_nwc(data.pubkey, None, False, True)
+    nwc = await get_nwc(GetNWC(pubkey=data.pubkey, refresh_last_used=True))
     error = await _check(nwc, "get_info", data.payload)
     if error:
         return [(None, error, [])]

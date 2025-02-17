@@ -29,38 +29,6 @@ class NWCKey(BaseModel):
         return cls(**row)
 
 
-class GetNWCKey(BaseModel):
-    pubkey: str
-    wallet_id: Optional[str] = None
-    include_expired: Optional[bool] = False
-    refresh_last_used: Optional[bool] = False
-
-
-class GetNWCs(BaseModel):
-    include_expired: bool = False
-    calculate_spent_budget: bool = False
-
-
-class GetWalletNWC(BaseModel):
-    wallet_id: Optional[str] = None
-    include_expired: Optional[bool] = False
-
-
-class GetBudgetsNWC(BaseModel):
-    pubkey: str
-    calculate_spent: Optional[bool] = False
-
-
-class TrackedSpendNWC(BaseModel):
-    pubkey: str
-    amount_msats: int
-
-
-class DeleteNWC(BaseModel):
-    pubkey: str
-    wallet_id: Optional[str] = None
-
-
 class OnInvoicePaid(BaseModel):
     class Config:
         arbitrary_types_allowed = True
@@ -95,23 +63,50 @@ class NWCBudget(BaseModel):
         return cls(**dict(row))
 
 
-class NWCLog(BaseModel):
-    id: int
-    pubkey: str
-    payload: str
-    created_at: int
-
-    @classmethod
-    def from_row(cls, row: Row) -> "NWCLog":
-        return cls(**dict(row))
-
-
 class NWCNewBudget(BaseModel):
     budget_msats: int
     refresh_window: int
     created_at: int
 
 
+# CRUD models
+class CreateNWCKey(BaseModel):
+    pubkey: str
+    wallet: str
+    description: str
+    expires_at: int
+    permissions: List[str]
+    budgets: Optional[List[NWCNewBudget]] = None
+
+
+class DeleteNWC(BaseModel):
+    pubkey: str
+    wallet: Optional[str] = None
+
+
+class GetWalletNWC(BaseModel):
+    wallet: Optional[str] = None
+    include_expired: Optional[bool] = False
+
+
+class GetNWC(BaseModel):
+    pubkey: str
+    wallet: Optional[str] = None
+    include_expired: Optional[bool] = False
+    refresh_last_used: Optional[bool] = False
+
+
+class GetBudgetsNWC(BaseModel):
+    pubkey: str
+    calculate_spent: Optional[bool] = False
+
+
+class TrackedSpendNWC(BaseModel):
+    pubkey: str
+    amount_msats: int
+
+
+# API models
 class NWCRegistrationRequest(BaseModel):
     permissions: List[str]
     description: str
@@ -119,20 +114,7 @@ class NWCRegistrationRequest(BaseModel):
     budgets: List[NWCNewBudget]
 
 
-class RegisterNWC(BaseModel):
-    pubkey: str
-    registration_data: NWCRegistrationRequest
-
-
 class NWCGetResponse(BaseModel):
     data: NWCKey
     budgets: List[NWCBudget]
 
-
-class CreateNWCKey(BaseModel):
-    pubkey: str
-    wallet_id: str
-    description: str
-    expires_at: int
-    permissions: List[str]
-    budgets: Optional[List[NWCNewBudget]] = None

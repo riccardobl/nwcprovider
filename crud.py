@@ -8,11 +8,11 @@ from .models import (
     CreateNWCKey,
     DeleteNWC,
     GetBudgetsNWC,
-    GetNWCKey,
     GetWalletNWC,
     NWCBudget,
     NWCKey,
     TrackedSpendNWC,
+    GetNWC
 )
 
 db = Database("ext_nwcprovider")
@@ -21,7 +21,7 @@ db = Database("ext_nwcprovider")
 async def create_nwc(data: CreateNWCKey) -> NWCKey:
     nwckey_entry = NWCKey(
         pubkey=data.pubkey,
-        wallet=data.wallet_id,
+        wallet=data.wallet,
         description=data.description,
         expires_at=int(data.expires_at) if data.expires_at else 0,
         permissions=" ".join(data.permissions),
@@ -31,20 +31,20 @@ async def create_nwc(data: CreateNWCKey) -> NWCKey:
     await db.insert("nwcprovider.keys", nwckey_entry)
     if data.budgets:
         for budget in data.budgets:
-            budget_entry = NWCKey(
+            budget_entry = NWCBudget( # fixme
                 pubkey=data.pubkey,
                 budget_msats=budget.budget_msats,
                 refresh_window=budget.refresh_window,
                 created_at=budget.created_at,
             )
             await db.insert("nwcprovider.budgets", budget_entry)
-    return NWCKey(**data.dict())
+    return NWCKey(**nwckey_entry.dict())
 
 
 async def delete_nwc(data: DeleteNWC) -> None:
     await db.execute(
         "DELETE FROM nwcprovider.keys WHERE pubkey = :pubkey AND wallet = :wallet",
-        {"pubkey": data.pubkey, "wallet": data.wallet_id},
+        {"pubkey": data.pubkey, "wallet": data.wallet},
     )
 
 
@@ -55,16 +55,16 @@ async def get_wallet_nwcs(data: GetWalletNWC) -> List[NWCKey]:
         WHERE wallet = :wallet AND (expires_at = 0 OR expires_at > :expires)
         """,
         {
-            "wallet": data.wallet_id,
+            "wallet": data.wallet,
             "expires": int(time.time()) if not data.include_expired else -1,
         },
         model=NWCKey,
     )
 
 
-async def get_nwc(data: GetNWCKey) -> Optional[NWCKey]:
+async def get_nwc(data: GetNWC) -> Optional[NWCKey]:
     # expires_at = 0 means it never expires
-    if data.wallet_id:
+    if data.wallet:
         row = await db.fetchone(
             """
             SELECT * FROM nwcprovider.keys
@@ -73,7 +73,7 @@ async def get_nwc(data: GetNWCKey) -> Optional[NWCKey]:
             """,
             {
                 "pubkey": data.pubkey,
-                "wallet": data.wallet_id,
+                "wallet": data.wallet,
                 "expires": int(time.time()) if not data.include_expired else -1,
             },
             NWCKey,
@@ -139,7 +139,9 @@ async def get_budgets_nwc(data: GetBudgetsNWC) -> Optional[NWCBudget]:
 async def tracked_spend_nwc(data: TrackedSpendNWC, action):
     async def r():
         created_at = int(time.time())
-        budgets = await get_budgets_nwc(data.pubkey)
+        budgets = await get_budgets_nwc(GetBudgetsNWC(
+            pubkey=data.pubkey
+        ))
         in_budget = True
         for budget in budgets:
             last_cycle, next_cycle = budget.get_timestamp_range()
@@ -194,14 +196,7 @@ async def get_config_nwc(key: str):
 async def set_config_nwc(key: str, value: str):
     await db.execute(
         """
-        DELETE FROM nwcprovider.config
-        WHERE key = :key
-        """,
-        {"key": key},
-    )
-    await db.execute(
-        """
-        INSERT INTO nwcprovider.config (key, value)
+        INSERT OR REPLACE INTO nwcprovider.config (key, value)
         VALUES (:key, :value)
         """,
         {"key": key, "value": value},

@@ -64,10 +64,11 @@ class NWCBudget(BaseModel):
 
 
 class NWCNewBudget(BaseModel):
+    pubkey: Optional[str]
     budget_msats: int
     refresh_window: int
     created_at: int
-
+    
 
 # CRUD models
 class CreateNWCKey(BaseModel):

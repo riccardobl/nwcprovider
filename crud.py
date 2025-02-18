@@ -12,7 +12,8 @@ from .models import (
     NWCBudget,
     NWCKey,
     TrackedSpendNWC,
-    GetNWC
+    GetNWC,
+    NWCNewBudget
 )
 
 db = Database("ext_nwcprovider")
@@ -31,7 +32,7 @@ async def create_nwc(data: CreateNWCKey) -> NWCKey:
     await db.insert("nwcprovider.keys", nwckey_entry)
     if data.budgets:
         for budget in data.budgets:
-            budget_entry = NWCBudget( # fixme
+            budget_entry = NWCNewBudget(  # fixme
                 pubkey=data.pubkey,
                 budget_msats=budget.budget_msats,
                 refresh_window=budget.refresh_window,
@@ -123,15 +124,15 @@ async def get_budgets_nwc(data: GetBudgetsNWC) -> Optional[NWCBudget]:
                 """
                 SELECT SUM(amount_msats) FROM nwcprovider.spent
                 WHERE pubkey = :pubkey AND created_at >=
-                :last_cycle AND created_at < next_cycle
+                :last_cycle AND created_at < :next_cycle
                 """,
                 {
                     "pubkey": data.pubkey,
                     "last_cycle": last_cycle,
                     "next_cycle": next_cycle,
                 },
-            )
-            tot_spent_in_range_msats = tot_spent_in_range_msats[0] or 0
+            )           
+            tot_spent_in_range_msats = next(iter(tot_spent_in_range_msats.values())) or 0
             budget.used_budget_msats = tot_spent_in_range_msats
     return budgets
 

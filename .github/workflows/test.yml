@@ -21,7 +21,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install poetry
-          pip install pytest-asyncio
 
       - name: Run setup script
         run: |
@@ -33,6 +32,7 @@ jobs:
           cd $HOME/lnbits
           poetry_env_path=$(poetry env info --path)
           source $poetry_env_path/bin/activate
+          pip install pytest-asyncio
           cd $cdir
           pytest tests/unit/*.py -s
 
@@ -45,5 +45,6 @@ jobs:
           cd $HOME/lnbits
           poetry_env_path=$(poetry env info --path)
           source $poetry_env_path/bin/activate
+          pip install pytest-asyncio
           cd $cdir
           pytest tests/integration/*.py -s

@@ -147,21 +147,18 @@ async def tracked_spend_nwc(data: TrackedSpendNWC, action):
         for budget in budgets:
             last_cycle, next_cycle = budget.get_timestamp_range()
             tot_spent_in_range_msats = (
-                (
-                    await db.fetchone(
-                        """
-                        SELECT SUM(amount_msats) FROM nwcprovider.spent
-                        WHERE pubkey = :pubkey AND created_at >=
-                        :last_cycle AND created_at < :next_cycle
-                        """,
-                        {
-                            "pubkey": data.pubkey,
-                            "last_cycle": last_cycle,
-                            "next_cycle": next_cycle,
-                        },
-                    )
-                )[0]
-                or 0
+                next(iter((await db.fetchone(
+                    """
+                    SELECT SUM(amount_msats) FROM nwcprovider.spent
+                    WHERE pubkey = :pubkey AND created_at >=
+                    :last_cycle AND created_at < :next_cycle
+                    """,
+                    {
+                        "pubkey": data.pubkey,
+                        "last_cycle": last_cycle,
+                        "next_cycle": next_cycle,
+                    },
+                )).values())) or 0
             )
             if tot_spent_in_range_msats + data.amount_msats > budget.budget_msats:
                 in_budget = False
@@ -181,7 +178,7 @@ async def tracked_spend_nwc(data: TrackedSpendNWC, action):
             },
         )
         return True, out
-
+    
     return await enqueue(r)
 
 

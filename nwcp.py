@@ -14,7 +14,6 @@ from Cryptodome.Util.Padding import pad, unpad
 from lnbits.helpers import encrypt_internal_message
 from lnbits.settings import settings
 from loguru import logger
-from pydantic import BaseModel
 
 
 class RateLimit:

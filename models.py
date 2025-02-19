@@ -29,13 +29,6 @@ class NWCKey(BaseModel):
         return cls(**row)
 
 
-class OnInvoicePaid(BaseModel):
-    class Config:
-        arbitrary_types_allowed = True
-
-    sp: NWCServiceProvider
-    pubkey: str
-    payload: Dict
 
 
 class NWCBudget(BaseModel):

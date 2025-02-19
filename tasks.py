@@ -117,7 +117,7 @@ async def _on_pay_invoice(
         pubkey=pubkey, 
         refresh_last_used=True
     ))
-    error = await _check(nwc, "pay_invoice", payload)
+    error = await _check(nwc, "pay_invoice")
     if error:
         return [(None, error, [])]
     if not nwc:
@@ -149,7 +149,7 @@ async def _on_multi_pay_invoice(
     payload: Dict
 ) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
     nwc = await get_nwc(GetNWC(pubkey=pubkey, refresh_last_used=True))
-    error = await _check(nwc, "multi_pay_invoice", payload)
+    error = await _check(nwc, "multi_pay_invoice")
     if error:
         return [(None, error, [])]
     if not nwc:
@@ -197,7 +197,7 @@ async def _on_make_invoice(
     payload: Dict
 ) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
     nwc = await get_nwc(GetNWC(pubkey=pubkey, refresh_last_used=True))
-    error = await _check(nwc, "make_invoice", payload)
+    error = await _check(nwc, "make_invoice")
     if error:
         return [(None, error, [])]
     if not nwc:
@@ -210,7 +210,7 @@ async def _on_make_invoice(
     description = params.get("description", "")
     description_hash = params.get("description_hash", None)
     expiry = params.get("expiry", None)
-    payment_hash, payment_request = await create_invoice(
+    payment = await create_invoice(
         wallet_id=nwc.wallet,
         amount=int(amount_msats / 1000),
         currency="sat",
@@ -219,6 +219,8 @@ async def _on_make_invoice(
         unhashed_description=description.encode("utf-8"),
         expiry=expiry,
     )
+    payment_hash = payment.payment_hash
+    payment_request = payment.bolt11
     payment_status = await check_transaction_status(
         wallet_id=nwc.wallet, payment_hash=payment_hash
     )
@@ -251,7 +253,7 @@ async def _on_lookup_invoice(
     payload: Dict
 ) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
     nwc = await get_nwc(GetNWC(pubkey=pubkey, refresh_last_used=True))
-    error = await _check(nwc, "lookup_invoice", payload)
+    error = await _check(nwc, "lookup_invoice")
     if error:
         return [(None, error, [])]
     if not nwc:
@@ -300,7 +302,7 @@ async def _on_list_transactions(
     payload: Dict
 ) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
     nwc = await get_nwc(GetNWC(pubkey=pubkey, refresh_last_used=True))
-    error = await _check(nwc, "list_transactions", payload)
+    error = await _check(nwc, "list_transactions")
     if error:
         return [(None, error, [])]
     if not nwc:
@@ -358,7 +360,7 @@ async def _on_get_balance(
     payload: Dict
 ) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
     nwc = await get_nwc(GetNWC(pubkey=pubkey, refresh_last_used= True))
-    error = await _check(nwc, "get_balance", payload)
+    error = await _check(nwc, "get_balance")
     if error:
         return [(None, error, [])]
     if not nwc:
@@ -378,7 +380,7 @@ async def _on_get_info(
     payload: Dict
 ) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
     nwc = await get_nwc(GetNWC(pubkey=pubkey, refresh_last_used=True))
-    error = await _check(nwc, "get_info", payload)
+    error = await _check(nwc, "get_info")
     if error:
         return [(None, error, [])]
     if not nwc:

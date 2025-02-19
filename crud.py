@@ -79,14 +79,7 @@ async def get_nwc(data: GetNWC) -> Optional[NWCKey]:
             },
             NWCKey,
         )
-    else:
-        row = await db.fetchone(
-            """
-            SELECT * FROM nwcprovider.keys
-            WHERE pubkey = ? AND (expires_at = 0 OR expires_at > ?)
-            """,
-            (data.pubkey, int(time.time()) if not data.include_expired else -1),
-        )
+    else:  
         row = await db.fetchone(
             """
             SELECT * FROM nwcprovider.keys
@@ -108,7 +101,7 @@ async def get_nwc(data: GetNWC) -> Optional[NWCKey]:
             """,
             {"last_used": int(time.time()), "pubkey": data.pubkey},
         )
-    return NWCKey(**row)
+    return row
 
 
 async def get_budgets_nwc(data: GetBudgetsNWC) -> Optional[NWCBudget]:

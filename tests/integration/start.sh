@@ -45,7 +45,9 @@ docker network connect lnbits_nwcprovider_ext_test_network lnbits_nwcprovider_ex
 docker network connect lnbits_nwcprovider_ext_test_network lnbits_nwcprovider_ext_lnbits_test --alias lnbits|| true
 
 docker exec lnbits_nwcprovider_ext_lnbits_test  bash -c "curl -sSL https://install.python-poetry.org | python3 -"
+
+set +e
 docker exec lnbits_nwcprovider_ext_lnbits_test bash -c "export PATH=\"/home/vscode/.local/bin:\$PATH\" && bash /setup.sh /nwcprovider"
 docker exec lnbits_nwcprovider_ext_lnbits_test bash -c "ln -s /app/.env \$HOME/lnbits/.env"
-docker exec -d lnbits_nwcprovider_ext_lnbits_test bash -c "export PATH=\"/home/vscode/.local/bin:\$PATH\" && cd \$HOME/lnbits && poetry run lnbits"
+docker exec lnbits_nwcprovider_ext_lnbits_test bash -c "export PATH=\"/home/vscode/.local/bin:\$PATH\" && cd \$HOME/lnbits && poetry run lnbits"
  

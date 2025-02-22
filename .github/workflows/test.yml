@@ -37,7 +37,8 @@ jobs:
           pytest tests/unit/*.py -s
 
       - name: Setup integration tests
-        run: bash tests/integration/start.sh
+        run: |
+          bash tests/integration/start.sh &
 
       - name: Run integration tests
         run: |

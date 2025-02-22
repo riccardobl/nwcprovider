@@ -31,17 +31,11 @@ unzip data.zip
 id=$(id -u)
 gid=$(id -g)
 
-if [ "$(whoami)" == "root" ]; then
-    id=1000
-    gid=1000
-fi
-
 
 docker run --name=lnbits_nwcprovider_ext_lnbits_test \
 -d \
 --rm \
 --user $id:$gid \
--e HOME=/home/vscode \
 -p 5002:5000 \
 -v ${PWD}/.env:/app/.env \
 -v ${PWD}/lnbits_itest_data/:/data \
@@ -50,6 +44,8 @@ docker run --name=lnbits_nwcprovider_ext_lnbits_test \
 -v ${PWD}/../../.devcontainer/setup.sh:/setup.sh:ro \
 mcr.microsoft.com/devcontainers/python:1-3.12 bash -c "while true; do sleep 1000; done"
 
+docker exec lnbits_nwcprovider_ext_lnbits_test bash -c "id -u $id &>/dev/null || useradd -m -u $id tester"
+
 docker network create lnbits_nwcprovider_ext_test_network || true
 docker network connect lnbits_nwcprovider_ext_test_network lnbits_nwcprovider_ext_nostr_test --alias nostr|| true
 docker network connect lnbits_nwcprovider_ext_test_network lnbits_nwcprovider_ext_lnbits_test --alias lnbits|| true
@@ -57,7 +53,7 @@ docker network connect lnbits_nwcprovider_ext_test_network lnbits_nwcprovider_ex
 docker exec --user $id:$gid lnbits_nwcprovider_ext_lnbits_test  bash -c "curl -sSL https://install.python-poetry.org | python3 -"
 
 set +e
-docker exec --user $id:$gid lnbits_nwcprovider_ext_lnbits_test bash -c "export PATH=\"/home/vscode/.local/bin:\$PATH\" && bash /setup.sh /nwcprovider"
+docker exec --user $id:$gid lnbits_nwcprovider_ext_lnbits_test bash -c "export PATH=\"\$HOME/.local/bin:\$PATH\" && bash /setup.sh /nwcprovider"
 docker exec --user $id:$gid lnbits_nwcprovider_ext_lnbits_test bash -c "ln -s /app/.env \$HOME/lnbits/.env"
 
 
@@ -67,5 +63,5 @@ then
     ARGS="-d"
 fi
 
-docker exec --user $id:$gid $ARGS lnbits_nwcprovider_ext_lnbits_test bash -c "export PATH=\"/home/vscode/.local/bin:\$PATH\" && cd \$HOME/lnbits && poetry run lnbits"
+docker exec --user $id:$gid $ARGS lnbits_nwcprovider_ext_lnbits_test bash -c "export PATH=\"\$HOME/.local/bin:\$PATH\" && cd \$HOME/lnbits && poetry run lnbits"
  

@@ -59,12 +59,25 @@ def assert_valid_sha256(v:str):
     assert_printable(v)
     if len(v) != 64 or not all(c in "0123456789abcdef" for c in v):
         panic("string is not a valid sha256 hash")
+
+# Check if value is an hash of an unexpected input (eg. empty strings, booleans etc)
+def assert_no_badhash(v:str):
+    bad_hashes = [
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", # empty string
+        "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068", # 1 space string
+        "c1c4b7fbd3e146bb14ec6258e5231c1ec703590721ff1e321b179a62b5857c9c", # None
+        "cdca0b9bb2325fc8ed7eba7734a3a1f876d919221399b6587ae7d26305adee9d", # True
+        "f9e08f8b038b1b401497f17da3adc120667ac742bf035657869a6ca1cd180e69", # False
+    ]
+    if v in bad_hashes:
+        panic("bad hash detected")
     
 # Check if valid nostr pubkey
 def assert_valid_pubkey(v:str):
     if not ENABLE_HARDENING:
         return
     assert_valid_sha256(v)
+    assert_no_badhash(v)
     
 
 # Check if valid wallet id

@@ -7,12 +7,13 @@
   "mounts": [
     "source=${localWorkspaceFolder}/.devcontainer/start.sh,target=/start-lnbits.sh,type=bind",
     "source=${localWorkspaceFolder}/.devcontainer/setup.sh,target=/setup.sh,type=bind",
+    "source=${localWorkspaceFolder}/.devcontainer/pre-setup.sh,target=/pre-setup.sh,type=bind",
     "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
   ],
   "containerEnv": {
     "IS_DEV_CONTAINER": "true"
   },
-  "postCreateCommand": "/bin/bash /setup.sh ${containerWorkspaceFolder}",
+  "postCreateCommand": "/bin/bash /pre-setup.sh && /bin/bash /setup.sh ${containerWorkspaceFolder}",
   "postStartCommand": "/bin/bash /start-lnbits.sh",
   "customizations": {
     "vscode": {

@@ -31,6 +31,11 @@ unzip data.zip
 id=$(id -u)
 gid=$(id -g)
 
+if [ "$(whoami)" == "root" ]; then
+    id=1000
+    gid=1000
+fi
+
 
 docker run --name=lnbits_nwcprovider_ext_lnbits_test \
 -d \

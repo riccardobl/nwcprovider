@@ -44,12 +44,11 @@ docker run --name=lnbits_nwcprovider_ext_lnbits_test \
 -v ${PWD}/../../.devcontainer/setup.sh:/setup.sh:ro \
 mcr.microsoft.com/devcontainers/python:1-3.12 bash -c "while true; do sleep 1000; done"
 
-docker exec lnbits_nwcprovider_ext_lnbits_test bash -c "id -u $id &>/dev/null || useradd -m -u $id tester"
-
 docker network create lnbits_nwcprovider_ext_test_network || true
 docker network connect lnbits_nwcprovider_ext_test_network lnbits_nwcprovider_ext_nostr_test --alias nostr|| true
 docker network connect lnbits_nwcprovider_ext_test_network lnbits_nwcprovider_ext_lnbits_test --alias lnbits|| true
 
+docker exec -u root lnbits_nwcprovider_ext_lnbits_test bash -c "id -u $id &>/dev/null || useradd -m -u $id tester"
 docker exec --user $id:$gid lnbits_nwcprovider_ext_lnbits_test  bash -c "curl -sSL https://install.python-poetry.org | python3 -"
 
 set +e

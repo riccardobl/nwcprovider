@@ -55,13 +55,14 @@ async def _process_invoice(
     amount_msats: int,
     description: Optional[str] = None,
 ):
-    async def execute_payment():
-        return await pay_invoice(
+    async def execute_payment() -> str :
+        payment = await pay_invoice(
             wallet_id=wallet_id,
             payment_request=invoice,
             max_sat=int(ceil(amount_msats / 1000)),
             description=description or "",
         )
+        return payment.payment_hash
 
     payment_hash = None
     try:
@@ -274,19 +275,21 @@ async def _on_lookup_invoice(
         raise Exception("Payment not found")
     invoice_data = bolt11_decode(payment.bolt11)
     is_settled = not payment.pending
-    timestamp = payment.time or invoice_data.date
+    timestamp = int(payment.time.timestamp()) or int(invoice_data.date)
+    expiry = int(payment.expiry.timestamp()) or timestamp + 3600
+    preimage = payment.preimage or "0000000000000000000000000000000000000000000000000000000000000000"
     res: Dict = {
         "type": "outgoing" if payment.is_out else "incoming",
         "invoice": payment.bolt11,
         "description": (
             invoice_data.description if invoice_data.description else payment.memo
         ),
-        "preimage": payment.preimage if is_settled or payment.is_in else None,
+        "preimage": preimage if is_settled or payment.is_in else None,
         "payment_hash": payment.payment_hash,
         "amount": abs(payment.msat),
         "fees_paid": abs(payment.fee),
         "created_at": timestamp,
-        "expires_at": payment.expiry if payment.expiry else timestamp + 3600,
+        "expires_at": expiry,
         "settled_at": timestamp if is_settled else None,
         "metadata": {},
     }
@@ -335,6 +338,7 @@ async def _on_list_transactions(
     for p in history:
         invoice_data = bolt11_decode(p.bolt11)
         is_settled = not p.pending
+        timestamp = int(p.time.timestamp()) or invoice_data.date
         transactions.append(
             {
                 "type": "outgoing" if p.is_out else "incoming",
@@ -345,8 +349,8 @@ async def _on_list_transactions(
                 "payment_hash": p.payment_hash,
                 "amount": abs(p.msat),
                 "fees_paid": p.fee,
-                "created_at": p.time,
-                "settled_at": p.time if is_settled else None,
+                "created_at": timestamp,
+                "settled_at": timestamp if is_settled else None,
                 "metadata": {},
             }
         )

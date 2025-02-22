@@ -323,7 +323,6 @@ class NWCServiceProvider:
             # Reference user
             res["tags"].append(["p", nwc_pubkey])
             # Finalize response event
-            print(res)
             res["content"] = self._encrypt_content(res["content"], nwc_pubkey)
             self._sign_event(res)
 

@@ -38,7 +38,8 @@ jobs:
 
       - name: Setup integration tests
         run: |
-          bash tests/integration/start.sh &
+          export HEADLESS=1
+          bash tests/integration/start.sh
 
       - name: Run integration tests
         run: |

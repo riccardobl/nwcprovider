@@ -49,5 +49,13 @@ docker exec lnbits_nwcprovider_ext_lnbits_test  bash -c "curl -sSL https://insta
 set +e
 docker exec lnbits_nwcprovider_ext_lnbits_test bash -c "export PATH=\"/home/vscode/.local/bin:\$PATH\" && bash /setup.sh /nwcprovider"
 docker exec lnbits_nwcprovider_ext_lnbits_test bash -c "ln -s /app/.env \$HOME/lnbits/.env"
-docker exec lnbits_nwcprovider_ext_lnbits_test bash -c "export PATH=\"/home/vscode/.local/bin:\$PATH\" && cd \$HOME/lnbits && poetry run lnbits"
+
+
+ARGS=""
+if [ "$HEADLESS" != "" ];
+then
+    ARGS="-d"
+fi
+
+docker exec $ARGS lnbits_nwcprovider_ext_lnbits_test bash -c "export PATH=\"/home/vscode/.local/bin:\$PATH\" && cd \$HOME/lnbits && poetry run lnbits"
  

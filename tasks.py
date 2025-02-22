@@ -503,7 +503,8 @@ async def _on_get_info(
 async def handle_nwc():
     priv_key = await get_config_nwc("provider_key")
     relay = await get_config_nwc("relay")
-    nwcsp = NWCServiceProvider(priv_key, relay)
+    handle_missed_events = int(await get_config_nwc("handle_missed_events") or 0)
+    nwcsp = NWCServiceProvider(priv_key, relay, handle_missed_events)
     nwcsp.add_request_listener("pay_invoice", _on_pay_invoice)
     nwcsp.add_request_listener("multi_pay_invoice", _on_multi_pay_invoice)
     nwcsp.add_request_listener("make_invoice", _on_make_invoice)

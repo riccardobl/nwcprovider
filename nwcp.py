@@ -47,10 +47,11 @@ class MainSubscription:
         if event_id not in self.responses:
             self.responses.append(event_id)
 
-    def gc(self, expire: int = 3 * 60 * 60):
+    def gc(self, expire: Optional[int] = None):
         """
-        Garbage collection, remove all the events that have a response older than expire seconds.
+        Garbage collection, remove all the events that have a response older than expire seconds (defaults to 1 hour if 0 or None)
         """
+        expire = expire or 1 * 60 * 60
         now = int(time.time())
         deleted_ids = []
         for [event_id, event] in self.events.items():
@@ -70,7 +71,7 @@ class MainSubscription:
 
 
 class NWCServiceProvider:
-    def __init__(self, private_key: Optional[str] = None, relay: Optional[str] = None):
+    def __init__(self, private_key: Optional[str] = None, relay: Optional[str] = None, handle_missed_events: int = 3 * 60 * 60):
         if not relay:  # Connect to nostrclient
             relay = "nostrclient"
         if relay == "nostrclient":
@@ -125,6 +126,11 @@ class NWCServiceProvider:
 
         # if True the instance is shutting down
         self.shutdown = False
+        
+        # process missed events that are not older than 
+        # handle_missed_events seconds (0 to disable)
+        #   (handles reboots)
+        self.handle_missed_events = handle_missed_events
 
         logger.info(
             "NWC Service is ready. relay: "
@@ -136,7 +142,7 @@ class NWCServiceProvider:
     async def _gc_loop(self):
         while not self._is_shutting_down():
             if self.sub:
-                self.sub.gc()
+                self.sub.gc(self.handle_missed_events)
             await asyncio.sleep(60)
 
 
@@ -263,15 +269,15 @@ class NWCServiceProvider:
         req_filter = {
             "kinds": [23194],
             "#p": [self.public_key_hex],
-            # Since the last 3 hours (handles reboots)
-            "since": int(time.time()) - 3 * 60 * 60,
+            # Since the last handle_missed_events seconds (handles reboots)
+            "since": int(time.time()) - self.handle_missed_events
         }
         self.sub.requests_sub_id = self._get_new_subid()
         # Create responses subscription (needed to track previosly responded requests)
         res_filter = {
             "kinds": [23195],
             "authors": [self.public_key_hex],
-            "since": int(time.time()) - 3 * 60 * 60,
+            "since": int(time.time()) - self.handle_missed_events,
         }
         self.sub.responses_sub_id = self._get_new_subid()
         # Subscribe

@@ -105,3 +105,17 @@ async def m005_key_last_used(db):
         ALTER TABLE nwcprovider.keys ADD COLUMN last_used INTEGER;
         """
     )
+
+
+async def m006_default_config3(db):
+    """
+    Default config
+    """
+
+    await db.execute(
+        """
+        INSERT OR REPLACE INTO nwcprovider.config
+        (key, value) VALUES ('handle_missed_events', :value);
+        """,
+        {"value": "0"},
+    )

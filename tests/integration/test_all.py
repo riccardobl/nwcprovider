@@ -335,7 +335,7 @@ class NWCWallet:
         await self.ws.send(self._json_dumps(["EVENT", event]))
 
     async def wait_for(
-        self, result_type, callback=None, on_error_callback=None, timeout=21
+        self, result_type, callback=None, on_error_callback=None, timeout=60
     ):
         now = time.time()
         while True:

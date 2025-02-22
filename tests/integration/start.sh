@@ -54,11 +54,11 @@ docker network create lnbits_nwcprovider_ext_test_network || true
 docker network connect lnbits_nwcprovider_ext_test_network lnbits_nwcprovider_ext_nostr_test --alias nostr|| true
 docker network connect lnbits_nwcprovider_ext_test_network lnbits_nwcprovider_ext_lnbits_test --alias lnbits|| true
 
-docker exec lnbits_nwcprovider_ext_lnbits_test  bash -c "curl -sSL https://install.python-poetry.org | python3 -"
+docker exec --user $id:$gid lnbits_nwcprovider_ext_lnbits_test  bash -c "curl -sSL https://install.python-poetry.org | python3 -"
 
 set +e
-docker exec lnbits_nwcprovider_ext_lnbits_test bash -c "export PATH=\"/home/vscode/.local/bin:\$PATH\" && bash /setup.sh /nwcprovider"
-docker exec lnbits_nwcprovider_ext_lnbits_test bash -c "ln -s /app/.env \$HOME/lnbits/.env"
+docker exec --user $id:$gid lnbits_nwcprovider_ext_lnbits_test bash -c "export PATH=\"/home/vscode/.local/bin:\$PATH\" && bash /setup.sh /nwcprovider"
+docker exec --user $id:$gid lnbits_nwcprovider_ext_lnbits_test bash -c "ln -s /app/.env \$HOME/lnbits/.env"
 
 
 ARGS=""
@@ -67,5 +67,5 @@ then
     ARGS="-d"
 fi
 
-docker exec $ARGS lnbits_nwcprovider_ext_lnbits_test bash -c "export PATH=\"/home/vscode/.local/bin:\$PATH\" && cd \$HOME/lnbits && poetry run lnbits"
+docker exec --user $id:$gid $ARGS lnbits_nwcprovider_ext_lnbits_test bash -c "export PATH=\"/home/vscode/.local/bin:\$PATH\" && cd \$HOME/lnbits && poetry run lnbits"
  

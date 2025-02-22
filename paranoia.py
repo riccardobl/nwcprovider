@@ -80,11 +80,23 @@ def assert_valid_wallet_id(v:str):
 def assert_valid_timestamp_seconds(v:int):
     if not ENABLE_HARDENING:
         return
-    assert_valid_int(v)
-    if v < 0 and v != -1:
-        panic("timestamp is negative")
+    assert_valid_positive_int(v)
     if v > 2**31:
         panic("timestamp is too high")
+
+
+# Check if valid expiration in seconds
+def assert_valid_expiration_seconds(v: int):
+    if not ENABLE_HARDENING:
+        return
+    assert_valid_int(v)
+    if v == -1:
+        return
+    if v < 0:
+        panic("expiration is invalid")
+    if v > 2**31:
+        panic("expiration is too high")
+
 
 # Check if string is within sane parameters
 def assert_sane_string(v:str):

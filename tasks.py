@@ -22,7 +22,7 @@ from .execution_queue import execution_queue
 from .models import NWCKey, TrackedSpendNWC, GetNWC
 from .nwcp import NWCServiceProvider
 from .permission import nwc_permissions
-from .paranoia import assert_valid_wallet_id, assert_valid_pubkey, assert_sane_string, assert_valid_timestamp_seconds, assert_valid_msats, assert_valid_positive_int, assert_valid_bolt11, assert_valid_sha256
+from .paranoia import assert_valid_wallet_id, assert_valid_pubkey, assert_sane_string, assert_valid_timestamp_seconds, assert_valid_expiration_seconds, assert_valid_msats, assert_valid_positive_int, assert_valid_bolt11, assert_valid_sha256
 
 
 async def _check(nwc: Optional[NWCKey], method: str) -> Optional[Dict]:
@@ -257,7 +257,7 @@ async def _on_make_invoice(
     if description_hash:
         assert_valid_sha256(description_hash)
     if expiry:
-        assert_valid_timestamp_seconds(expiry)
+        assert_valid_expiration_seconds(expiry)
     # ## #
     
     payment = await create_invoice(

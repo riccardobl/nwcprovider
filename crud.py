@@ -15,7 +15,7 @@ from .models import (
     GetNWC,
     NWCNewBudget
 )
-from .paranoia import assert_valid_wallet_id, assert_valid_pubkey, assert_sane_string, assert_valid_timestamp_seconds, assert_valid_msats, assert_valid_positive_int
+from .paranoia import assert_valid_wallet_id, assert_valid_pubkey, assert_sane_string, assert_valid_timestamp_seconds, assert_valid_expiration_seconds, assert_valid_msats, assert_valid_positive_int
 
 db = Database("ext_nwcprovider")
 
@@ -26,7 +26,7 @@ async def create_nwc(data: CreateNWCKey) -> NWCKey:
     assert_valid_pubkey(data.pubkey)
     assert_valid_wallet_id(data.wallet)
     assert_sane_string(data.description)
-    assert_valid_timestamp_seconds(data.expires_at)
+    assert_valid_expiration_seconds(data.expires_at)
     for permission in data.permissions:
         assert_sane_string(permission)
 
@@ -77,7 +77,7 @@ async def get_wallet_nwcs(data: GetWalletNWC) -> List[NWCKey]:
     
     # hardening #
     assert_valid_wallet_id(data.wallet)
-    assert_valid_timestamp_seconds(expires)
+    assert_valid_expiration_seconds(expires)
     # ## #
 
     return await db.fetchall(
@@ -98,7 +98,7 @@ async def get_nwc(data: GetNWC) -> Optional[NWCKey]:
 
     # hardening #
     assert_valid_pubkey(data.pubkey)
-    assert_valid_timestamp_seconds(expires)
+    assert_valid_expiration_seconds(expires)
     # ## #
 
     # expires_at = 0 means it never expires

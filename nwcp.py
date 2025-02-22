@@ -47,6 +47,24 @@ class MainSubscription:
         if event_id not in self.responses:
             self.responses.append(event_id)
 
+    def gc(self, expire: int = 3 * 60 * 60):
+        """
+        Garbage collection, remove all the events that have a response older than expire seconds.
+        """
+        now = int(time.time())
+        deleted_ids = []
+        for [event_id, event] in self.events.items():
+            if event_id in self.responses:
+                if now - event["created_at"] > expire:
+                    del self.events[event_id]
+                    deleted_ids.append(event_id)
+        self.responses = [event_id for event_id in self.responses if event_id not in deleted_ids]
+
+        if len(deleted_ids) > 0:
+            logger.debug("Garbage collected " + str(len(deleted_ids)) + " events")
+        
+                    
+
     class Config:
         arbitrary_types_allowed = True
 
@@ -92,6 +110,9 @@ class NWCServiceProvider:
         # Reconnect task (if the connection is lost)
         self.reconnect_task = None
 
+        # Garbage collection loop
+        self.gc_task = None
+
         # Subscription
         self.sub = None
         self.rate_limit: Dict[str, RateLimit] = {}
@@ -111,6 +132,13 @@ class NWCServiceProvider:
             + " pubkey: "
             + self.public_key_hex
         )
+
+    async def _gc_loop(self):
+        while not self._is_shutting_down():
+            if self.sub:
+                self.sub.gc()
+            await asyncio.sleep(60)
+
 
     def get_supported_methods(self):
         """
@@ -144,6 +172,7 @@ class NWCServiceProvider:
         Starts the NWC service provider.
         """
         self.reconnect_task = asyncio.create_task(self._connect_to_relay())
+        self.gc_task = asyncio.create_task(self._gc_loop())
 
     def _json_dumps(self, data: Union[Dict, list]) -> str:
         """
@@ -602,6 +631,11 @@ class NWCServiceProvider:
                 self.reconnect_task.cancel()
         except Exception as e:
             logger.warning("Error closing reconnection task: " + str(e))
+        try:
+            if self.gc_task:
+                self.gc_task.cancel()
+        except Exception as e:
+            logger.warning("Error closing gc loop: " + str(e))
         # close the websocket
         try:
             if self.ws:

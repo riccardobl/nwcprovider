@@ -71,7 +71,7 @@ class MainSubscription:
 
 
 class NWCServiceProvider:
-    def __init__(self, private_key: Optional[str] = None, relay: Optional[str] = None, handle_missed_events: int = 3 * 60 * 60):
+    def __init__(self, private_key: Optional[str] = None, relay: Optional[str] = None, handle_missed_events: int = 0):
         if not relay:  # Connect to nostrclient
             relay = "nostrclient"
         if relay == "nostrclient":

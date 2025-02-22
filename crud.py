@@ -15,11 +15,28 @@ from .models import (
     GetNWC,
     NWCNewBudget
 )
+from .paranoia import assert_valid_wallet_id, assert_valid_pubkey, assert_sane_string, assert_valid_timestamp_seconds, assert_valid_msats, assert_valid_positive_int
 
 db = Database("ext_nwcprovider")
 
 
 async def create_nwc(data: CreateNWCKey) -> NWCKey:
+
+    # hardening #
+    assert_valid_pubkey(data.pubkey)
+    assert_valid_wallet_id(data.wallet)
+    assert_sane_string(data.description)
+    assert_valid_timestamp_seconds(data.expires_at)
+    for permission in data.permissions:
+        assert_sane_string(permission)
+
+    if data.budgets:
+        for budget in data.budgets:
+            assert_valid_msats(budget.budget_msats)
+            assert_valid_positive_int(budget.refresh_window)
+            assert_valid_timestamp_seconds(budget.created_at)
+    # ## #
+
     nwckey_entry = NWCKey(
         pubkey=data.pubkey,
         wallet=data.wallet,
@@ -43,6 +60,12 @@ async def create_nwc(data: CreateNWCKey) -> NWCKey:
 
 
 async def delete_nwc(data: DeleteNWC) -> None:
+
+    # hardening #
+    assert_valid_pubkey(data.pubkey)
+    assert_valid_wallet_id(data.wallet)
+    # ## #
+
     await db.execute(
         "DELETE FROM nwcprovider.keys WHERE pubkey = :pubkey AND wallet = :wallet",
         {"pubkey": data.pubkey, "wallet": data.wallet},
@@ -50,6 +73,13 @@ async def delete_nwc(data: DeleteNWC) -> None:
 
 
 async def get_wallet_nwcs(data: GetWalletNWC) -> List[NWCKey]:
+    expires =  int(time.time()) if not data.include_expired else -1
+    
+    # hardening #
+    assert_valid_wallet_id(data.wallet)
+    assert_valid_timestamp_seconds(expires)
+    # ## #
+
     return await db.fetchall(
         """
         SELECT * FROM nwcprovider.keys
@@ -57,15 +87,23 @@ async def get_wallet_nwcs(data: GetWalletNWC) -> List[NWCKey]:
         """,
         {
             "wallet": data.wallet,
-            "expires": int(time.time()) if not data.include_expired else -1,
+            "expires": expires,
         },
         model=NWCKey,
     )
 
 
 async def get_nwc(data: GetNWC) -> Optional[NWCKey]:
+    expires =  int(time.time()) if not data.include_expired else -1
+
+    # hardening #
+    assert_valid_pubkey(data.pubkey)
+    assert_valid_timestamp_seconds(expires)
+    # ## #
+
     # expires_at = 0 means it never expires
     if data.wallet:
+        assert_valid_wallet_id(data.wallet)
         row = await db.fetchone(
             """
             SELECT * FROM nwcprovider.keys
@@ -75,7 +113,7 @@ async def get_nwc(data: GetNWC) -> Optional[NWCKey]:
             {
                 "pubkey": data.pubkey,
                 "wallet": data.wallet,
-                "expires": int(time.time()) if not data.include_expired else -1,
+                "expires": expires,
             },
             NWCKey,
         )
@@ -87,7 +125,7 @@ async def get_nwc(data: GetNWC) -> Optional[NWCKey]:
             """,
             {
                 "pubkey": data.pubkey,
-                "expires": int(time.time()) if not data.include_expired else -1,
+                "expires": expires,
             },
             NWCKey,
         )
@@ -105,6 +143,11 @@ async def get_nwc(data: GetNWC) -> Optional[NWCKey]:
 
 
 async def get_budgets_nwc(data: GetBudgetsNWC) -> Optional[NWCBudget]:
+    
+    # hardening #
+    assert_valid_pubkey(data.pubkey)
+    # ## #
+
     rows = await db.fetchall(
         "SELECT * FROM nwcprovider.budgets WHERE pubkey = :pubkey",
         {"pubkey": data.pubkey},
@@ -113,6 +156,12 @@ async def get_budgets_nwc(data: GetBudgetsNWC) -> Optional[NWCBudget]:
     if data.calculate_spent:
         for budget in budgets:
             last_cycle, next_cycle = budget.get_timestamp_range()
+            
+            # hardening #
+            assert_valid_timestamp_seconds(last_cycle)
+            assert_valid_timestamp_seconds(next_cycle)
+            # ## #
+
             tot_spent_in_range_msats = await db.fetchone(
                 """
                 SELECT SUM(amount_msats) FROM nwcprovider.spent
@@ -126,12 +175,23 @@ async def get_budgets_nwc(data: GetBudgetsNWC) -> Optional[NWCBudget]:
                 },
             )           
             tot_spent_in_range_msats = next(iter(tot_spent_in_range_msats.values())) or 0
+
+            # hardening #
+            assert_valid_msats(tot_spent_in_range_msats)
+            # ## #
+
             budget.used_budget_msats = tot_spent_in_range_msats
     return budgets
 
 
 async def tracked_spend_nwc(data: TrackedSpendNWC, action):
     async def r():
+
+        # hardening #
+        assert_valid_pubkey(data.pubkey)
+        assert_valid_msats(data.amount_msats)
+        # ## #
+
         created_at = int(time.time())
         budgets = await get_budgets_nwc(GetBudgetsNWC(
             pubkey=data.pubkey
@@ -139,6 +199,12 @@ async def tracked_spend_nwc(data: TrackedSpendNWC, action):
         in_budget = True
         for budget in budgets:
             last_cycle, next_cycle = budget.get_timestamp_range()
+
+            # hardening #
+            assert_valid_timestamp_seconds(last_cycle)
+            assert_valid_timestamp_seconds(next_cycle)
+            # ## #
+
             tot_spent_in_range_msats = (
                 next(iter((await db.fetchone(
                     """
@@ -153,6 +219,12 @@ async def tracked_spend_nwc(data: TrackedSpendNWC, action):
                     },
                 )).values())) or 0
             )
+
+            # hardening #
+            assert_valid_msats(tot_spent_in_range_msats)
+            assert_valid_msats(budget.budget_msats)            
+            # ## #
+
             if tot_spent_in_range_msats + data.amount_msats > budget.budget_msats:
                 in_budget = False
                 break
@@ -185,6 +257,12 @@ async def get_config_nwc(key: str):
 
 
 async def set_config_nwc(key: str, value: str):
+
+    # hardening #
+    assert_sane_string(key)
+    assert_sane_string(value)
+    # ## #
+    
     await db.execute(
         """
         INSERT OR REPLACE INTO nwcprovider.config (key, value)

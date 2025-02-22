@@ -28,6 +28,7 @@ from .models import (
     GetBudgetsNWC
 )
 from .permission import nwc_permissions
+from .paranoia import assert_valid_wallet_id, assert_valid_pubkey, assert_sane_string
 
 nwcprovider_api_router = APIRouter()
 
@@ -53,6 +54,11 @@ async def api_get_nwcs(
     wallet: WalletTypeInfo = Depends(require_admin_key),
 ):
     wallet_id = wallet.wallet.id
+
+    # hardening #
+    assert_valid_wallet_id(wallet_id)
+    # ## # 
+
     wallet_nwcs = GetWalletNWC(
         wallet=wallet_id, 
         include_expired=include_expired
@@ -82,6 +88,12 @@ async def api_get_nwc(
     wallet: WalletTypeInfo = Depends(require_admin_key)
 ) -> NWCGetResponse:
     wallet_id = wallet.wallet.id
+
+    # hardening #
+    assert_valid_pubkey(pubkey)
+    assert_valid_wallet_id(wallet_id)
+    # ## #
+
     nwc = await get_nwc(GetNWC(pubkey=pubkey, wallet=wallet_id, include_expired=include_expired))
     if not nwc:
         raise Exception("Pubkey has no associated wallet")
@@ -103,6 +115,11 @@ async def api_get_pairing_url(
     req: Request, 
     secret: str
 ) -> str:
+    
+    # hardening #
+    assert_sane_string(secret)
+    # ## #
+
     pprivkey: Optional[str] = await get_config_nwc("provider_key")
     if not pprivkey:
         raise Exception("Extension is not configured")
@@ -147,6 +164,12 @@ async def api_register_nwc(
     wallet: WalletTypeInfo = Depends(require_admin_key),
 ):
     wallet_id = wallet.wallet.id
+
+    # hardening #
+    assert_valid_pubkey(pubkey)
+    assert_valid_wallet_id(wallet_id)
+    # ## #
+
     nwc = await create_nwc(
         CreateNWCKey(
             pubkey=pubkey,
@@ -176,6 +199,12 @@ async def api_delete_nwc(
     wallet: WalletTypeInfo = Depends(require_admin_key)
 ):
     wallet_id = wallet.wallet.id
+
+    # hardening #
+    assert_valid_pubkey(pubkey)
+    assert_valid_wallet_id(wallet_id)
+    # ## #
+
     await delete_nwc(DeleteNWC(
         pubkey=pubkey, 
         wallet=wallet_id
@@ -217,6 +246,13 @@ async def api_get_config_nwc(key: str):
 )
 async def api_set_config_nwc(req: Request):
     data = await req.json()
+
+    # hardening #
+    for key, value in data.items():
+        assert_sane_string(key)
+        assert_sane_string(value)
+    # ## #
+
     for key, value in data.items():
         await set_config_nwc(key, value)
     return await api_get_all_config_nwc()

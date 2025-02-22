@@ -22,7 +22,11 @@ Configure the extension from the "Settings" page in the top right menu when logg
 
 > [!WARNING]
 >
-> Do not change handle_missed_events from its default value of 0 unless you fully understand its implications. While a non-zero value may improve service quality under unstable conditions (e.g., poor connectivity or unreliable power), it can also lead to unexpected behavior. For example, in shared or community lnbits instances, where users are unaware of this functionality, they might assume a payment has failed and attempt to pay a new invoice with a different wallet, only for the instance to come back online and process the original payment request, potentially leading to duplicate payments. For this reason, unless you are trying to tackle this specific issue, it is recommended to leave this setting at 0.
+> Do not change `handle_missed_events` from its default value of `0` unless you fully understand its implications.
+> While a non-zero value may improve service quality under unstable conditions (e.g., poor connectivity or unreliable power), it can also lead to unexpected behavior. 
+> For example, in shared or community lnbits instances, where users are unaware of this functionality, they might assume a payment has failed and attempt to pay a new invoice with a different wallet, only for the instance to come back online and process the original payment request, potentially leading to duplicate payments.
+>
+> For this reason, unless you are trying to tackle this specific issue, it is recommended to leave this setting at `0`.
 
 
 ### Using Nostrclient

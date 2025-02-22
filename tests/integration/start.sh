@@ -31,16 +31,12 @@ unzip data.zip
 id=$(id -u)
 gid=$(id -g)
 
-if [ "$(whoami)" == "root" ]; then
-    id=1000
-    gid=1000
-fi
-
 
 docker run --name=lnbits_nwcprovider_ext_lnbits_test \
 -d \
 --rm \
 --user $id:$gid \
+-e HOME=/home/vscode \
 -p 5002:5000 \
 -v ${PWD}/.env:/app/.env \
 -v ${PWD}/lnbits_itest_data/:/data \

@@ -6,8 +6,8 @@ ENABLE_HARDENING = True
 def panic(reason:str):
     if not ENABLE_HARDENING:
         return
-    logger.error(f"hardening error:  {reason}")
-    raise ValueError(f"hardening error:  {reason}")
+    logger.error(f"hardening:  {reason}")
+    raise ValueError(f"hardening:  {reason}")
     
 # Throw if string contains any non-printable characters
 def assert_printable(v:str):
@@ -81,7 +81,7 @@ def assert_valid_timestamp_seconds(v:int):
     if not ENABLE_HARDENING:
         return
     assert_valid_int(v)
-    if v < 0:
+    if v < 0 and v != -1:
         panic("timestamp is negative")
     if v > 2**31:
         panic("timestamp is too high")

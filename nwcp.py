@@ -59,19 +59,24 @@ class MainSubscription:
                 if now - event["created_at"] > expire:
                     del self.events[event_id]
                     deleted_ids.append(event_id)
-        self.responses = [event_id for event_id in self.responses if event_id not in deleted_ids]
+        self.responses = [
+            event_id for event_id in self.responses if event_id not in deleted_ids
+        ]
 
         if len(deleted_ids) > 0:
             logger.debug("Garbage collected " + str(len(deleted_ids)) + " events")
-        
-                    
 
     class Config:
         arbitrary_types_allowed = True
 
 
 class NWCServiceProvider:
-    def __init__(self, private_key: Optional[str] = None, relay: Optional[str] = None, handle_missed_events: int = 0):
+    def __init__(
+        self,
+        private_key: Optional[str] = None,
+        relay: Optional[str] = None,
+        handle_missed_events: int = 0,
+    ):
         if not relay:  # Connect to nostrclient
             relay = "nostrclient"
         if relay == "nostrclient":
@@ -126,8 +131,8 @@ class NWCServiceProvider:
 
         # if True the instance is shutting down
         self.shutdown = False
-        
-        # process missed events that are not older than 
+
+        # process missed events that are not older than
         # handle_missed_events seconds (0 to disable)
         #   (handles reboots)
         self.handle_missed_events = handle_missed_events
@@ -144,7 +149,6 @@ class NWCServiceProvider:
             if self.sub:
                 self.sub.gc(self.handle_missed_events)
             await asyncio.sleep(60)
-
 
     def get_supported_methods(self):
         """
@@ -270,7 +274,7 @@ class NWCServiceProvider:
             "kinds": [23194],
             "#p": [self.public_key_hex],
             # Since the last handle_missed_events seconds (handles reboots)
-            "since": int(time.time()) - self.handle_missed_events
+            "since": int(time.time()) - self.handle_missed_events,
         }
         self.sub.requests_sub_id = self._get_new_subid()
         # Create responses subscription (needed to track previosly responded requests)

@@ -6,8 +6,6 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
-from .nwcp import NWCServiceProvider
-
 
 class NWCKey(BaseModel):
     pubkey: str
@@ -27,8 +25,6 @@ class NWCKey(BaseModel):
     @classmethod
     def from_row(cls, row: Dict[str, Any]) -> "NWCKey":
         return cls(**row)
-
-
 
 
 class NWCBudget(BaseModel):
@@ -61,7 +57,7 @@ class NWCNewBudget(BaseModel):
     budget_msats: int
     refresh_window: int
     created_at: int
-    
+
 
 # CRUD models
 class CreateNWCKey(BaseModel):
@@ -111,4 +107,3 @@ class NWCRegistrationRequest(BaseModel):
 class NWCGetResponse(BaseModel):
     data: NWCKey
     budgets: List[NWCBudget]
-

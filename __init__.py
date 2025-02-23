@@ -32,6 +32,7 @@ def nwcprovider_stop():
         except Exception as ex:
             logger.warning(ex)
 
+
 def nwcprovider_start():
     task = create_permanent_unique_task("ext_nwcprovider", handle_nwc)
     scheduled_tasks.append(task)

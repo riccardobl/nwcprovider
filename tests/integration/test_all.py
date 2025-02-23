@@ -852,7 +852,6 @@ async def test_budget_refresh():
     await wallet1.close()
 
 
-
 # Mostly AI generated pentests
 
 
@@ -882,7 +881,7 @@ async def test_idor_vulnerability():
     async with httpx.AsyncClient() as client:
         resp = await client.get(
             f"http://localhost:5002/nwcprovider/api/v1/nwc/{nwc_wallet1['pubkey']}",
-            headers={"X-Api-Key": wallets["wallet2"]["admin_key"]}
+            headers={"X-Api-Key": wallets["wallet2"]["admin_key"]},
         )
         assert resp.status_code == 500
         assert "Pubkey has no associated wallet" in resp.text
@@ -896,7 +895,7 @@ async def test_sql_injection():
         resp = await client.put(
             f"http://localhost:5002/nwcprovider/api/v1/nwc/{malicious_pubkey}",
             headers={"X-Api-Key": wallets["wallet1"]["admin_key"]},
-            json={"permissions": ["pay"], "description": "test"}
+            json={"permissions": ["pay"], "description": "test"},
         )
         # Should be rejected by input validation
         assert resp.status_code == 400
@@ -941,8 +940,14 @@ async def test_budget_bypass():
         "wallet1",
         "test_budget_bypass",
         ["pay", "invoice"],
-        [{"budget_msats": 100000, "refresh_window": 3600, "created_at": int(time.time())}],
-        0
+        [
+            {
+                "budget_msats": 100000,
+                "refresh_window": 3600,
+                "created_at": int(time.time()),
+            }
+        ],
+        0,
     )
     wallet = NWCWallet(nwc["pairing"])
     await wallet.start()
@@ -963,17 +968,19 @@ async def test_budget_bypass():
 @pytest.mark.asyncio
 async def test_unauthorized_config():
     """Test unauthorized access to config endpoint"""
-    malicious_relay = "ws://attacker-relay.example"    
+    malicious_relay = "ws://attacker-relay.example"
+
     async def set_config_nwc(key: str, value: str):
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 "http://localhost:5002/nwcprovider/api/v1/config",
                 json={key: value},
-                headers={"X-Api-Key": "lnbitsadmin"}  # Assuming admin key
+                headers={"X-Api-Key": "lnbitsadmin"},  # Assuming admin key
             )
             assert resp.status_code == 401
+
     await set_config_nwc("relay", malicious_relay)
-    
+
 
 async def create_valid_invoice(wallet, amount=1000):
     """Helper function to create valid test invoice"""

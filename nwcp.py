@@ -49,7 +49,8 @@ class MainSubscription:
 
     def gc(self, expire: Optional[int] = None):
         """
-        Garbage collection, remove all the events that have a response older than expire seconds (defaults to 1 hour if 0 or None)
+        Garbage collection, remove all the events that have a response older
+        than expire seconds (defaults to 1 hour if 0 or None)
         """
         expire = expire or 1 * 60 * 60
         now = int(time.time())

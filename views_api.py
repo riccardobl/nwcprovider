@@ -28,7 +28,7 @@ from .models import (
     GetBudgetsNWC
 )
 from .permission import nwc_permissions
-from .paranoia import assert_valid_wallet_id, assert_valid_pubkey, assert_sane_string
+from .paranoia import assert_valid_wallet_id, assert_valid_pubkey, assert_sane_string, assert_boolean
 
 nwcprovider_api_router = APIRouter()
 
@@ -57,6 +57,8 @@ async def api_get_nwcs(
 
     # hardening #
     assert_valid_wallet_id(wallet_id)
+    assert_boolean(include_expired)
+    assert_boolean(calculate_spent_budget)
     # ## # 
 
     wallet_nwcs = GetWalletNWC(
@@ -84,13 +86,14 @@ async def api_get_nwcs(
 )
 async def api_get_nwc(
     pubkey: str,
-    include_expired: Optional[bool] = False,
+    include_expired: bool = False,
     wallet: WalletTypeInfo = Depends(require_admin_key)
 ) -> NWCGetResponse:
     wallet_id = wallet.wallet.id
 
     # hardening #
     assert_valid_pubkey(pubkey)
+    assert_boolean(include_expired)
     assert_valid_wallet_id(wallet_id)
     # ## #
 

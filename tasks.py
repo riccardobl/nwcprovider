@@ -22,7 +22,7 @@ from .execution_queue import execution_queue
 from .models import NWCKey, TrackedSpendNWC, GetNWC
 from .nwcp import NWCServiceProvider
 from .permission import nwc_permissions
-from .paranoia import assert_valid_wallet_id, assert_valid_pubkey, assert_sane_string, assert_valid_timestamp_seconds, assert_valid_expiration_seconds, assert_valid_msats, assert_valid_positive_int, assert_valid_bolt11, assert_valid_sha256
+from .paranoia import assert_valid_wallet_id, assert_valid_pubkey, assert_boolean, assert_sane_string,  assert_valid_expiration_seconds, assert_valid_msats, assert_valid_positive_int, assert_valid_bolt11, assert_valid_sha256
 
 
 async def _check(nwc: Optional[NWCKey], method: str) -> Optional[Dict]:
@@ -202,6 +202,8 @@ async def _on_multi_pay_invoice(
             # hardening #
             assert_valid_bolt11(invoice)
             assert_valid_msats(amount_msats)
+            if invoice_id:
+                assert_sane_string(invoice_id)
             # ## #
 
             res = await _process_invoice(
@@ -379,13 +381,14 @@ async def _on_list_transactions(
     limit = payload.get("limit", 10)
     offset = payload.get("offset", 0)
     unpaid = payload.get("unpaid", False)
-    tx_type = payload.get("type", None)
+    tx_type = payload.get("type", "")
 
     # hardening #
     assert_valid_positive_int(tfrom)
     assert_valid_positive_int(tto)
     assert_valid_positive_int(limit)
     assert_valid_positive_int(offset)
+    assert_boolean(unpaid)
     assert_sane_string(tx_type)
     # ## #
 

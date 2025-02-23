@@ -144,4 +144,12 @@ def assert_valid_bolt11(invoice:str):
     if not ENABLE_HARDENING:
         return
     assert_printable(invoice)
+
+
+# Check if boolean
+def assert_boolean(v:bool):
+    if not ENABLE_HARDENING:
+        return
+    if not isinstance(v, bool):
+        panic("not a boolean")
     

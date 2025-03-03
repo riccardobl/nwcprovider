@@ -4,174 +4,243 @@ from typing import List, Optional
 from lnbits.db import Database
 
 from .execution_queue import enqueue
-from .models import NWCBudget, NWCKey, NWCNewBudget
+from .models import (
+    CreateNWCKey,
+    DeleteNWC,
+    GetBudgetsNWC,
+    GetNWC,
+    GetWalletNWC,
+    NWCBudget,
+    NWCKey,
+    NWCNewBudget,
+    TrackedSpendNWC,
+)
+from .paranoia import (
+    assert_sane_string,
+    assert_valid_expiration_seconds,
+    assert_valid_msats,
+    assert_valid_positive_int,
+    assert_valid_pubkey,
+    assert_valid_timestamp_seconds,
+    assert_valid_wallet_id,
+)
 
 db = Database("ext_nwcprovider")
 
 
-async def create_nwc(
-    pubkey: str,
-    wallet_id: str,
-    description: str,
-    expires_at: int,
-    permissions: List[str],
-    budgets: Optional[List[NWCNewBudget]] = None,
-) -> NWCKey:
-    # Check if the key already exists
-    if await get_nwc(pubkey, None, True):
-        raise Exception("Public key already used")
-    # If not, create it
-    now = int(time.time())
-    await db.execute(
-        """
-        INSERT INTO nwcprovider.keys (
-            pubkey,
-            wallet,
-            description,
-            permissions,
-            created_at,
-            expires_at,
-            last_used
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            pubkey,
-            wallet_id,
-            description,
-            " ".join(permissions),
-            now,
-            int(expires_at) if expires_at else 0,
-            now,
-        ),
+async def create_nwc(data: CreateNWCKey) -> NWCKey:
+
+    # hardening #
+    assert_valid_pubkey(data.pubkey)
+    assert_valid_wallet_id(data.wallet)
+    assert_sane_string(data.description)
+    assert_valid_expiration_seconds(data.expires_at)
+    for permission in data.permissions:
+        assert_sane_string(permission)
+
+    if data.budgets:
+        for budget in data.budgets:
+            assert_valid_msats(budget.budget_msats)
+            assert_valid_positive_int(budget.refresh_window)
+            assert_valid_timestamp_seconds(budget.created_at)
+    # ## #
+
+    nwckey_entry = NWCKey(
+        pubkey=data.pubkey,
+        wallet=data.wallet,
+        description=data.description,
+        expires_at=int(data.expires_at) if data.expires_at else 0,
+        permissions=" ".join(data.permissions),
+        created_at=int(time.time()),
+        last_used=int(time.time()),
     )
-    # Add budgets
-    if budgets:
-        for budget in budgets:
-            await db.execute(
-                """
-                INSERT INTO nwcprovider.budgets (
-                    pubkey,
-                    budget_msats,
-                    refresh_window,
-                    created_at
-                )
-                VALUES (?, ?, ?, ?)
-                """,
-                (pubkey, budget.budget_msats, budget.refresh_window, budget.created_at),
+    await db.insert("nwcprovider.keys", nwckey_entry)
+    if data.budgets:
+        for budget in data.budgets:
+            budget_entry = NWCNewBudget(  # fixme
+                pubkey=data.pubkey,
+                budget_msats=budget.budget_msats,
+                refresh_window=budget.refresh_window,
+                created_at=budget.created_at,
             )
-    # Return the created key
-    return NWCKey(
-        pubkey=pubkey,
-        wallet=wallet_id,
-        description=description,
-        expires_at=expires_at,
-        permissions=" ".join(permissions),
-        created_at=now,
-        last_used=now,
-    )
+            await db.insert("nwcprovider.budgets", budget_entry)
+    return NWCKey(**nwckey_entry.dict())
 
 
-async def delete_nwc(pubkey: str, wallet_id: str):
-    nwc = await get_nwc(pubkey, wallet_id)
-    if not nwc:
-        raise Exception("Public key does not exist")
+async def delete_nwc(data: DeleteNWC) -> None:
+
+    # hardening #
+    assert_valid_pubkey(data.pubkey)
+    assert_valid_wallet_id(data.wallet)
+    # ## #
+
     await db.execute(
-        """
-        DELETE FROM nwcprovider.keys WHERE pubkey = ? AND wallet = ?
-        """,
-        (pubkey, wallet_id),
+        "DELETE FROM nwcprovider.keys WHERE pubkey = :pubkey AND wallet = :wallet",
+        {"pubkey": data.pubkey, "wallet": data.wallet},
     )
 
 
-async def get_wallet_nwcs(
-    wallet_id: str, include_expired: Optional[bool] = False
-) -> List[NWCKey]:
-    rows = await db.fetchall(
+async def get_wallet_nwcs(data: GetWalletNWC) -> List[NWCKey]:
+    expires = int(time.time()) if not data.include_expired else -1
+
+    # hardening #
+    assert_valid_wallet_id(data.wallet)
+    assert_valid_expiration_seconds(expires)
+    # ## #
+
+    return await db.fetchall(
         """
         SELECT * FROM nwcprovider.keys
-        WHERE wallet = ? AND (expires_at = 0 OR expires_at > ?)
+        WHERE wallet = :wallet AND (expires_at = 0 OR expires_at > :expires)
         """,
-        (wallet_id, int(time.time()) if not include_expired else -1),
+        {
+            "wallet": data.wallet,
+            "expires": expires,
+        },
+        model=NWCKey,
     )
-    return [NWCKey(**row) for row in rows]
 
 
-async def get_nwc(
-    pubkey: str,
-    wallet_id: Optional[str] = None,
-    include_expired: Optional[bool] = False,
-    refresh_last_used: Optional[bool] = False,
-) -> Optional[NWCKey]:
+async def get_nwc(data: GetNWC) -> Optional[NWCKey]:
+    expires = int(time.time()) if not data.include_expired else -1
+
+    # hardening #
+    assert_valid_pubkey(data.pubkey)
+    assert_valid_expiration_seconds(expires)
+    # ## #
+
     # expires_at = 0 means it never expires
-    if wallet_id:
+    if data.wallet:
+        assert_valid_wallet_id(data.wallet)
         row = await db.fetchone(
             """
             SELECT * FROM nwcprovider.keys
-            WHERE pubkey = ? AND wallet = ? AND (expires_at = 0 OR expires_at > ?)
+            WHERE pubkey = :pubkey AND wallet = :wallet
+            AND (expires_at = 0 OR expires_at > :expires)
             """,
-            (pubkey, wallet_id, int(time.time()) if not include_expired else -1),
+            {
+                "pubkey": data.pubkey,
+                "wallet": data.wallet,
+                "expires": expires,
+            },
+            NWCKey,
         )
     else:
         row = await db.fetchone(
             """
             SELECT * FROM nwcprovider.keys
-            WHERE pubkey = ? AND (expires_at = 0 OR expires_at > ?)
+            WHERE pubkey = :pubkey AND (expires_at = 0 OR expires_at > :expires)
             """,
-            (pubkey, int(time.time()) if not include_expired else -1),
+            {
+                "pubkey": data.pubkey,
+                "expires": expires,
+            },
+            NWCKey,
         )
     if not row:
         return None
-    if refresh_last_used:
+    if data.refresh_last_used:
         await db.execute(
             """
-            UPDATE nwcprovider.keys SET last_used = ? WHERE pubkey = ?
+            UPDATE nwcprovider.keys SET last_used =
+            :last_used WHERE pubkey = :pubkey
             """,
-            (int(time.time()), pubkey),
+            {"last_used": int(time.time()), "pubkey": data.pubkey},
         )
-    return NWCKey(**row)
+    return row
 
 
-async def get_budgets_nwc(pubkey, calculate_spent=False):
+async def get_budgets_nwc(data: GetBudgetsNWC) -> Optional[NWCBudget]:
+
+    # hardening #
+    assert_valid_pubkey(data.pubkey)
+    # ## #
+
     rows = await db.fetchall(
-        "SELECT * FROM nwcprovider.budgets WHERE pubkey = ?", (pubkey)
+        "SELECT * FROM nwcprovider.budgets WHERE pubkey = :pubkey",
+        {"pubkey": data.pubkey},
     )
     budgets = [NWCBudget(**row) for row in rows]
-    if calculate_spent:
+    if data.calculate_spent:
         for budget in budgets:
             last_cycle, next_cycle = budget.get_timestamp_range()
+
+            # hardening #
+            assert_valid_timestamp_seconds(last_cycle)
+            assert_valid_timestamp_seconds(next_cycle)
+            # ## #
+
             tot_spent_in_range_msats = await db.fetchone(
                 """
                 SELECT SUM(amount_msats) FROM nwcprovider.spent
-                WHERE pubkey = ? AND created_at >= ? AND created_at < ?
+                WHERE pubkey = :pubkey AND created_at >=
+                :last_cycle AND created_at < :next_cycle
                 """,
-                (pubkey, last_cycle, next_cycle),
+                {
+                    "pubkey": data.pubkey,
+                    "last_cycle": last_cycle,
+                    "next_cycle": next_cycle,
+                },
             )
-            tot_spent_in_range_msats = tot_spent_in_range_msats[0] or 0
+            tot_spent_in_range_msats = (
+                next(iter(tot_spent_in_range_msats.values())) or 0
+            )
+
+            # hardening #
+            assert_valid_msats(tot_spent_in_range_msats)
+            # ## #
+
             budget.used_budget_msats = tot_spent_in_range_msats
     return budgets
 
 
-async def tracked_spend_nwc(pubkey: str, amount_msats: int, action):
+async def tracked_spend_nwc(data: TrackedSpendNWC, action):
     async def r():
+
+        # hardening #
+        assert_valid_pubkey(data.pubkey)
+        assert_valid_msats(data.amount_msats)
+        # ## #
+
         created_at = int(time.time())
-        budgets = await get_budgets_nwc(pubkey)
+        budgets = await get_budgets_nwc(GetBudgetsNWC(pubkey=data.pubkey))
         in_budget = True
         for budget in budgets:
             last_cycle, next_cycle = budget.get_timestamp_range()
+
+            # hardening #
+            assert_valid_timestamp_seconds(last_cycle)
+            assert_valid_timestamp_seconds(next_cycle)
+            # ## #
+
             tot_spent_in_range_msats = (
-                (
-                    await db.fetchone(
-                        """
-                        SELECT SUM(amount_msats) FROM nwcprovider.spent
-                        WHERE pubkey = ? AND created_at >= ? AND created_at < ?
-                        """,
-                        (pubkey, last_cycle, next_cycle),
+                next(
+                    iter(
+                        (
+                            await db.fetchone(
+                                """
+                    SELECT SUM(amount_msats) FROM nwcprovider.spent
+                    WHERE pubkey = :pubkey AND created_at >=
+                    :last_cycle AND created_at < :next_cycle
+                    """,
+                                {
+                                    "pubkey": data.pubkey,
+                                    "last_cycle": last_cycle,
+                                    "next_cycle": next_cycle,
+                                },
+                            )
+                        ).values()
                     )
-                )[0]
+                )
                 or 0
             )
-            if tot_spent_in_range_msats + amount_msats > budget.budget_msats:
+
+            # hardening #
+            assert_valid_msats(tot_spent_in_range_msats)
+            assert_valid_msats(budget.budget_msats)
+            # ## #
+
+            if tot_spent_in_range_msats + data.amount_msats > budget.budget_msats:
                 in_budget = False
                 break
         if not in_budget:
@@ -180,9 +249,13 @@ async def tracked_spend_nwc(pubkey: str, amount_msats: int, action):
         await db.execute(
             """
             INSERT INTO nwcprovider.spent (pubkey, amount_msats, created_at)
-            VALUES (?, ?, ?)
+            VALUES (:pubkey, :amount_msats, :created_at)
             """,
-            (pubkey, amount_msats, created_at),
+            {
+                "pubkey": data.pubkey,
+                "amount_msats": data.amount_msats,
+                "created_at": created_at,
+            },
         )
         return True, out
 
@@ -190,29 +263,31 @@ async def tracked_spend_nwc(pubkey: str, amount_msats: int, action):
 
 
 async def get_config_nwc(key: str):
-    row = await db.fetchone("SELECT * FROM nwcprovider.config WHERE key = ?", (key,))
+    row = await db.fetchone(
+        "SELECT * FROM nwcprovider.config WHERE key = :key", {"key": key}
+    )
     if not row:
         return None
     return row["value"]
 
 
-async def get_all_config_nwc():
-    rows = await db.fetchall("SELECT * FROM nwcprovider.config")
-    return {row["key"]: row["value"] for row in rows}
-
-
 async def set_config_nwc(key: str, value: str):
-    await db.execute(
-        """
-        DELETE FROM nwcprovider.config
-        WHERE key = ?
-        """,
-        (key,),
-    )
+
+    # hardening #
+    assert_sane_string(key)
+    assert_sane_string(value)
+    # ## #
+
     await db.execute(
         """
         INSERT INTO nwcprovider.config (key, value)
-        VALUES (?, ?)
+        VALUES (:key, :value)
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
         """,
-        (key, value),
+        {"key": key, "value": value},
     )
+
+
+async def get_all_config_nwc():
+    rows = await db.fetchall("SELECT * FROM nwcprovider.config")
+    return {row["key"]: row["value"] for row in rows}

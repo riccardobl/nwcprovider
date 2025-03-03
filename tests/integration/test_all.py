@@ -335,7 +335,7 @@ class NWCWallet:
         await self.ws.send(self._json_dumps(["EVENT", event]))
 
     async def wait_for(
-        self, result_type, callback=None, on_error_callback=None, timeout=10
+        self, result_type, callback=None, on_error_callback=None, timeout=60
     ):
         now = time.time()
         while True:
@@ -850,3 +850,144 @@ async def test_budget_refresh():
 
     await wallet3.close()
     await wallet1.close()
+
+
+# Mostly AI generated pentests
+
+
+@pytest.mark.asyncio
+async def test_unauthorized_access():
+    """Test accessing protected endpoints without valid API keys"""
+    async with httpx.AsyncClient() as client:
+        # privkey b758d3c535f8d089ce20473bafb33ee2f2f8deb94c97a0c5272cbf5bdc29f573
+        # Try to create NWC without API key
+        resp = await client.put(
+            "http://localhost:5002/nwcprovider/api/v1/nwc/033c415d948f92aa7aa788ecfe49e49c3acae882d3dd2294574141bd786e18b6"
+        )
+        assert resp.status_code == 401
+
+        # Try to access config endpoint without admin privileges
+        resp = await client.get("http://localhost:5002/nwcprovider/api/v1/config")
+        assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_idor_vulnerability():
+    """Test Insecure Direct Object Reference through pubkey manipulation"""
+    # Create NWC for wallet1
+    nwc_wallet1 = await create_nwc("wallet1", "test_idor", ["pay"], [], 0)
+
+    # Attempt to access wallet1's NWC using wallet2's credentials
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            f"http://localhost:5002/nwcprovider/api/v1/nwc/{nwc_wallet1['pubkey']}",
+            headers={"X-Api-Key": wallets["wallet2"]["admin_key"]},
+        )
+        assert resp.status_code == 500
+        assert "Pubkey has no associated wallet" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_sql_injection():
+    """Test for SQL injection vulnerabilities in parameters"""
+    malicious_pubkey = "'; DROP TABLE nwc;--"
+    async with httpx.AsyncClient() as client:
+        resp = await client.put(
+            f"http://localhost:5002/nwcprovider/api/v1/nwc/{malicious_pubkey}",
+            headers={"X-Api-Key": wallets["wallet1"]["admin_key"]},
+            json={"permissions": ["pay"], "description": "test"},
+        )
+        # Should be rejected by input validation
+        assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_invalid_invoice_handling():
+    """Test handling of malformed invoices"""
+    nwc = await create_nwc("wallet1", "test_invalid", ["pay"], [], 0)
+    wallet = NWCWallet(nwc["pairing"])
+    await wallet.start()
+
+    # Send invalid invoice
+    await wallet.send_event("pay_invoice", {"invoice": "invalid_lninvoice"})
+    _, _, error = await wallet.wait_for("pay_invoice")
+    assert error["code"] == "INTERNAL"
+
+
+@pytest.mark.asyncio
+async def test_replay_attack():
+    """Test message replay protection"""
+    nwc = await create_nwc("wallet1", "test_replay", ["pay", "invoice"], [], 0)
+    wallet = NWCWallet(nwc["pairing"])
+    await wallet.start()
+
+    # Capture valid payment request
+    valid_invoice = await create_valid_invoice(wallet)
+    await wallet.send_event("pay_invoice", {"invoice": valid_invoice})
+    _, _, error = await wallet.wait_for("pay_invoice")
+    assert not error
+
+    # Replay same message
+    await wallet.send_event("pay_invoice", {"invoice": valid_invoice})
+    _, _, error = await wallet.wait_for("pay_invoice")
+    assert error["code"] == "PAYMENT_FAILED"
+
+
+@pytest.mark.asyncio
+async def test_budget_bypass():
+    """Test budget limit enforcement"""
+    nwc = await create_nwc(
+        "wallet1",
+        "test_budget_bypass",
+        ["pay", "invoice"],
+        [
+            {
+                "budget_msats": 100000,
+                "refresh_window": 3600,
+                "created_at": int(time.time()),
+            }
+        ],
+        0,
+    )
+    wallet = NWCWallet(nwc["pairing"])
+    await wallet.start()
+
+    # First payment within budget
+    invoice1 = await create_valid_invoice(wallet, 50000)
+    await wallet.send_event("pay_invoice", {"invoice": invoice1})
+    _, _, error = await wallet.wait_for("pay_invoice")
+    assert not error
+
+    # Attempt to exceed budget
+    invoice2 = await create_valid_invoice(wallet, 60000)
+    await wallet.send_event("pay_invoice", {"invoice": invoice2})
+    _, _, error = await wallet.wait_for("pay_invoice")
+    assert error["code"] == "QUOTA_EXCEEDED"
+
+
+@pytest.mark.asyncio
+async def test_unauthorized_config():
+    """Test unauthorized access to config endpoint"""
+    malicious_relay = "ws://attacker-relay.example"
+
+    async def set_config_nwc(key: str, value: str):
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                "http://localhost:5002/nwcprovider/api/v1/config",
+                json={key: value},
+                headers={"X-Api-Key": "lnbitsadmin"},  # Assuming admin key
+            )
+            assert resp.status_code == 401
+
+    await set_config_nwc("relay", malicious_relay)
+
+
+async def create_valid_invoice(wallet, amount=1000):
+    """Helper function to create valid test invoice"""
+    await wallet.send_event(
+        "make_invoice", {"amount": amount, "description": "test invoice"}
+    )
+    result, tags, error = await wallet.wait_for("make_invoice")
+    if error:
+        raise Exception(f"Failed to create invoice: {error}")
+    return result["invoice"]

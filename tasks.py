@@ -19,12 +19,23 @@ from loguru import logger
 
 from .crud import get_config_nwc, get_nwc, tracked_spend_nwc
 from .execution_queue import execution_queue
-from .models import NWCKey
+from .models import GetNWC, NWCKey, TrackedSpendNWC
 from .nwcp import NWCServiceProvider
+from .paranoia import (
+    assert_boolean,
+    assert_sane_string,
+    assert_valid_bolt11,
+    assert_valid_expiration_seconds,
+    assert_valid_msats,
+    assert_valid_positive_int,
+    assert_valid_pubkey,
+    assert_valid_sha256,
+    assert_valid_wallet_id,
+)
 from .permission import nwc_permissions
 
 
-async def _check(nwc: Optional[NWCKey], method: str, payload: Dict) -> Optional[Dict]:
+async def _check(nwc: Optional[NWCKey], method: str) -> Optional[Dict]:
     # check
     if not nwc:
         return {
@@ -55,18 +66,29 @@ async def _process_invoice(
     amount_msats: int,
     description: Optional[str] = None,
 ):
-    async def execute_payment():
-        return await pay_invoice(
+
+    # hardening #
+    assert_valid_wallet_id(wallet_id)
+    assert_valid_pubkey(pubkey)
+    assert_valid_bolt11(invoice)
+    assert_valid_msats(amount_msats)
+    if description:
+        assert_sane_string(description)
+    # ## #
+
+    async def execute_payment() -> str:
+        payment = await pay_invoice(
             wallet_id=wallet_id,
             payment_request=invoice,
             max_sat=int(ceil(amount_msats / 1000)),
             description=description or "",
         )
+        return payment.payment_hash
 
     payment_hash = None
     try:
         in_budget, payment_hash = await tracked_spend_nwc(
-            pubkey, amount_msats, execute_payment
+            TrackedSpendNWC(pubkey=pubkey, amount_msats=amount_msats), execute_payment
         )
         if not in_budget:
             error = {
@@ -108,8 +130,13 @@ async def _process_invoice(
 async def _on_pay_invoice(
     sp: NWCServiceProvider, pubkey: str, payload: Dict
 ) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
-    nwc = await get_nwc(pubkey, None, False, True)
-    error = await _check(nwc, "pay_invoice", payload)
+
+    # hardening #
+    assert_valid_pubkey(pubkey)
+    # ## #
+
+    nwc = await get_nwc(GetNWC(pubkey=pubkey, refresh_last_used=True))
+    error = await _check(nwc, "pay_invoice")
     if error:
         return [(None, error, [])]
     if not nwc:
@@ -121,6 +148,12 @@ async def _on_pay_invoice(
         raise Exception("Missing invoice")
     invoice_data = bolt11_decode(invoice)
     amount_msats = int(invoice_data.amount_msat or 0)
+
+    # hardening #
+    assert_valid_bolt11(invoice)
+    assert_valid_msats(amount_msats)
+    # ## #
+
     res = await _process_invoice(
         nwc.wallet, pubkey, invoice, amount_msats, invoice_data.description
     )
@@ -138,8 +171,13 @@ async def _on_pay_invoice(
 async def _on_multi_pay_invoice(
     sp: NWCServiceProvider, pubkey: str, payload: Dict
 ) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
-    nwc = await get_nwc(pubkey, None, False, True)
-    error = await _check(nwc, "multi_pay_invoice", payload)
+
+    # hardening #
+    assert_valid_pubkey(pubkey)
+    # ## #
+
+    nwc = await get_nwc(GetNWC(pubkey=pubkey, refresh_last_used=True))
+    error = await _check(nwc, "multi_pay_invoice")
     if error:
         return [(None, error, [])]
     if not nwc:
@@ -160,6 +198,14 @@ async def _on_multi_pay_invoice(
             invoice = i.get("invoice", None)
             invoice_data = bolt11_decode(invoice)
             amount_msats = int(invoice_data.amount_msat or 0)
+
+            # hardening #
+            assert_valid_bolt11(invoice)
+            assert_valid_msats(amount_msats)
+            if invoice_id:
+                assert_sane_string(invoice_id)
+            # ## #
+
             res = await _process_invoice(
                 nwc.wallet, pubkey, invoice, amount_msats, invoice_data.description
             )
@@ -184,8 +230,13 @@ async def _on_multi_pay_invoice(
 async def _on_make_invoice(
     sp: NWCServiceProvider, pubkey: str, payload: Dict
 ) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
-    nwc = await get_nwc(pubkey, None, False, True)
-    error = await _check(nwc, "make_invoice", payload)
+
+    # hardening #
+    assert_valid_pubkey(pubkey)
+    # ## #
+
+    nwc = await get_nwc(GetNWC(pubkey=pubkey, refresh_last_used=True))
+    error = await _check(nwc, "make_invoice")
     if error:
         return [(None, error, [])]
     if not nwc:
@@ -198,7 +249,18 @@ async def _on_make_invoice(
     description = params.get("description", "")
     description_hash = params.get("description_hash", None)
     expiry = params.get("expiry", None)
-    payment_hash, payment_request = await create_invoice(
+
+    # hardening #
+    assert_valid_msats(amount_msats)
+    if description:
+        assert_sane_string(description)
+    if description_hash:
+        assert_valid_sha256(description_hash)
+    if expiry:
+        assert_valid_expiration_seconds(expiry)
+    # ## #
+
+    payment = await create_invoice(
         wallet_id=nwc.wallet,
         amount=int(amount_msats / 1000),
         currency="sat",
@@ -207,6 +269,8 @@ async def _on_make_invoice(
         unhashed_description=description.encode("utf-8"),
         expiry=expiry,
     )
+    payment_hash = payment.payment_hash
+    payment_request = payment.bolt11
     payment_status = await check_transaction_status(
         wallet_id=nwc.wallet, payment_hash=payment_hash
     )
@@ -236,8 +300,13 @@ async def _on_make_invoice(
 async def _on_lookup_invoice(
     sp: NWCServiceProvider, pubkey: str, payload: Dict
 ) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
-    nwc = await get_nwc(pubkey, None, False, True)
-    error = await _check(nwc, "lookup_invoice", payload)
+
+    # hardening #
+    assert_valid_pubkey(pubkey)
+    # ## #
+
+    nwc = await get_nwc(GetNWC(pubkey=pubkey, refresh_last_used=True))
+    error = await _check(nwc, "lookup_invoice")
     if error:
         return [(None, error, [])]
     if not nwc:
@@ -252,25 +321,36 @@ async def _on_lookup_invoice(
     if not payment_hash:
         invoice_data = bolt11_decode(invoice)
         payment_hash = invoice_data.payment_hash
+
+    # hardening #
+    assert_valid_sha256(payment_hash)
+    assert_valid_bolt11(invoice)
+    # ## #
+
     # Get payment data
     payment = await get_wallet_payment(nwc.wallet, payment_hash)
     if not payment:
         raise Exception("Payment not found")
     invoice_data = bolt11_decode(payment.bolt11)
     is_settled = not payment.pending
-    timestamp = payment.time or invoice_data.date
+    timestamp = int(payment.time.timestamp()) or int(invoice_data.date)
+    expiry = int(payment.expiry.timestamp()) or timestamp + 3600
+    preimage = (
+        payment.preimage
+        or "0000000000000000000000000000000000000000000000000000000000000000"
+    )
     res: Dict = {
         "type": "outgoing" if payment.is_out else "incoming",
         "invoice": payment.bolt11,
         "description": (
             invoice_data.description if invoice_data.description else payment.memo
         ),
-        "preimage": payment.preimage if is_settled or payment.is_in else None,
+        "preimage": preimage if is_settled or payment.is_in else None,
         "payment_hash": payment.payment_hash,
         "amount": abs(payment.msat),
         "fees_paid": abs(payment.fee),
         "created_at": timestamp,
-        "expires_at": payment.expiry if payment.expiry else timestamp + 3600,
+        "expires_at": expiry,
         "settled_at": timestamp if is_settled else None,
         "metadata": {},
     }
@@ -283,8 +363,12 @@ async def _on_lookup_invoice(
 async def _on_list_transactions(
     sp: NWCServiceProvider, pubkey: str, payload: Dict
 ) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
-    nwc = await get_nwc(pubkey, None, False, True)
-    error = await _check(nwc, "list_transactions", payload)
+    # hardening #
+    assert_valid_pubkey(pubkey)
+    # ## #
+
+    nwc = await get_nwc(GetNWC(pubkey=pubkey, refresh_last_used=True))
+    error = await _check(nwc, "list_transactions")
     if error:
         return [(None, error, [])]
     if not nwc:
@@ -294,7 +378,17 @@ async def _on_list_transactions(
     limit = payload.get("limit", 10)
     offset = payload.get("offset", 0)
     unpaid = payload.get("unpaid", False)
-    tx_type = payload.get("type", None)
+    tx_type = payload.get("type", "")
+
+    # hardening #
+    assert_valid_positive_int(tfrom)
+    assert_valid_positive_int(tto)
+    assert_valid_positive_int(limit)
+    assert_valid_positive_int(offset)
+    assert_boolean(unpaid)
+    assert_sane_string(tx_type)
+    # ## #
+
     values = []
     filters: Filters = Filters()
     filters.where(["time <= ?"])
@@ -317,6 +411,7 @@ async def _on_list_transactions(
     for p in history:
         invoice_data = bolt11_decode(p.bolt11)
         is_settled = not p.pending
+        timestamp = int(p.time.timestamp()) or invoice_data.date
         transactions.append(
             {
                 "type": "outgoing" if p.is_out else "incoming",
@@ -327,8 +422,8 @@ async def _on_list_transactions(
                 "payment_hash": p.payment_hash,
                 "amount": abs(p.msat),
                 "fees_paid": p.fee,
-                "created_at": p.time,
-                "settled_at": p.time if is_settled else None,
+                "created_at": timestamp,
+                "settled_at": timestamp if is_settled else None,
                 "metadata": {},
             }
         )
@@ -339,8 +434,13 @@ async def _on_list_transactions(
 async def _on_get_balance(
     sp: NWCServiceProvider, pubkey: str, payload: Dict
 ) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
-    nwc = await get_nwc(pubkey, None, False, True)
-    error = await _check(nwc, "get_balance", payload)
+
+    # hardening #
+    assert_valid_pubkey(pubkey)
+    # ## #
+
+    nwc = await get_nwc(GetNWC(pubkey=pubkey, refresh_last_used=True))
+    error = await _check(nwc, "get_balance")
     if error:
         return [(None, error, [])]
     if not nwc:
@@ -357,8 +457,13 @@ async def _on_get_balance(
 async def _on_get_info(
     sp: NWCServiceProvider, pubkey: str, payload: Dict
 ) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
-    nwc = await get_nwc(pubkey, None, False, True)
-    error = await _check(nwc, "get_info", payload)
+
+    # hardening #
+    assert_valid_pubkey(pubkey)
+    # ## #
+
+    nwc = await get_nwc(GetNWC(pubkey=pubkey, refresh_last_used=True))
+    error = await _check(nwc, "get_info")
     if error:
         return [(None, error, [])]
     if not nwc:
@@ -394,7 +499,8 @@ async def _on_get_info(
 async def handle_nwc():
     priv_key = await get_config_nwc("provider_key")
     relay = await get_config_nwc("relay")
-    nwcsp = NWCServiceProvider(priv_key, relay)
+    handle_missed_events = int(await get_config_nwc("handle_missed_events") or 0)
+    nwcsp = NWCServiceProvider(priv_key, relay, handle_missed_events)
     nwcsp.add_request_listener("pay_invoice", _on_pay_invoice)
     nwcsp.add_request_listener("multi_pay_invoice", _on_multi_pay_invoice)
     nwcsp.add_request_listener("make_invoice", _on_make_invoice)

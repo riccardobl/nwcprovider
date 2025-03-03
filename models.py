@@ -2,7 +2,7 @@
 
 import time
 from sqlite3 import Row
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
@@ -52,23 +52,51 @@ class NWCBudget(BaseModel):
         return cls(**dict(row))
 
 
-class NWCLog(BaseModel):
-    id: int
-    pubkey: str
-    payload: str
-    created_at: int
-
-    @classmethod
-    def from_row(cls, row: Row) -> "NWCLog":
-        return cls(**dict(row))
-
-
 class NWCNewBudget(BaseModel):
+    pubkey: Optional[str]
     budget_msats: int
     refresh_window: int
     created_at: int
 
 
+# CRUD models
+class CreateNWCKey(BaseModel):
+    pubkey: str
+    wallet: str
+    description: str
+    expires_at: int
+    permissions: List[str]
+    budgets: Optional[List[NWCNewBudget]] = None
+
+
+class DeleteNWC(BaseModel):
+    pubkey: str
+    wallet: Optional[str] = None
+
+
+class GetWalletNWC(BaseModel):
+    wallet: Optional[str] = None
+    include_expired: Optional[bool] = False
+
+
+class GetNWC(BaseModel):
+    pubkey: str
+    wallet: Optional[str] = None
+    include_expired: Optional[bool] = False
+    refresh_last_used: Optional[bool] = False
+
+
+class GetBudgetsNWC(BaseModel):
+    pubkey: str
+    calculate_spent: Optional[bool] = False
+
+
+class TrackedSpendNWC(BaseModel):
+    pubkey: str
+    amount_msats: int
+
+
+# API models
 class NWCRegistrationRequest(BaseModel):
     permissions: List[str]
     description: str

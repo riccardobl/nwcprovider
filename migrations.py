@@ -68,15 +68,17 @@ async def m003_default_config(db):
     """
     await db.execute(
         """
-        INSERT INTO nwcprovider.config (key, value) VALUES ('relay', 'nostrclient');
+        INSERT INTO nwcprovider.config (key, value) VALUES ('relay', 'nostrclient')
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
         """
     )
     new_private_key = bytes.hex(secp256k1._gen_private_key())
     await db.execute(
         """
-        INSERT INTO nwcprovider.config (key, value) VALUES ('provider_key', ?);
+        INSERT INTO nwcprovider.config (key, value) VALUES ('provider_key', :provider_key)
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
         """,
-        (new_private_key,),
+        {"provider_key": new_private_key},
     )
 
 
@@ -84,14 +86,13 @@ async def m004_default_config2(db):
     """
     Default config
     """
-
     await db.execute(
-        """
-        INSERT INTO nwcprovider.config (key, value) VALUES ('relay_alias', ?);
+       """
+        INSERT INTO nwcprovider.config (key, value) VALUES ('relay_alias', :value)
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
         """,
-        ("",),
-    )
-
+       {"value": ""},
+   )
 
 async def m005_key_last_used(db):
     """
@@ -101,4 +102,17 @@ async def m005_key_last_used(db):
         """
         ALTER TABLE nwcprovider.keys ADD COLUMN last_used INTEGER;
         """
+    )
+
+
+async def m006_default_config3(db):
+    """
+    Default config
+    """
+    await db.execute(
+        """
+        INSERT INTO nwcprovider.config (key, value) VALUES ('handle_missed_events', :value)
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+        """,
+        {"value": "0"},
     )

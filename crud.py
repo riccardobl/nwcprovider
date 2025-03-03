@@ -280,8 +280,9 @@ async def set_config_nwc(key: str, value: str):
 
     await db.execute(
         """
-        INSERT OR REPLACE INTO nwcprovider.config (key, value)
+        INSERT INTO nwcprovider.config (key, value)
         VALUES (:key, :value)
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
         """,
         {"key": key, "value": value},
     )

@@ -9,6 +9,11 @@ nwc_permissions = {
         ],
         "default": True,
     },
+    "offer": {
+        "name": "Create offer",
+        "methods": ["make_offer"],
+        "default": True,
+    },
     "invoice": {
         "name": "Create invoices",
         "methods": ["make_invoice"],

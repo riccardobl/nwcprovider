@@ -8,6 +8,7 @@ from lnbits.core.crud import get_payments, get_wallet, get_wallet_payment
 from lnbits.core.models import Payment
 from lnbits.core.services import (
     check_transaction_status,
+    create_offer,
     create_invoice,
     pay_invoice,
 )
@@ -225,6 +226,57 @@ async def _on_multi_pay_invoice(
             results.append((None, {"code": "INTERNAL", "message": str(e)}, []))
     # await log_nwc(pubkey, payload)
     return results
+
+
+async def _on_make_offer(
+    sp: NWCServiceProvider, pubkey: str, payload: Dict
+) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
+
+    # hardening #
+    assert_valid_pubkey(pubkey)
+    # ## #
+
+    nwc = await get_nwc(GetNWC(pubkey=pubkey, refresh_last_used=True))
+    error = await _check(nwc, "make_offer")
+    if error:
+        return [(None, error, [])]
+    if not nwc:
+        raise Exception("Pubkey has no associated wallet")
+    params = payload.get("params", {})
+    amount_msats = params.get("amount", None)
+    memo = params.get("memo", "")
+    absolute_expiry = params.get("absolute_expiry", None)
+    single_use = params.get("single_use", False)
+
+    # hardening #
+    if amount_msats is not None:
+        assert_valid_msats(amount_msats)
+    if memo:
+        assert_sane_string(memo)
+    if absolute_expiry:
+        assert_valid_expiration_seconds(absolute_expiry)
+    assert_boolean(single_use)
+    # ## #
+
+    offer = await create_offer(
+            wallet_id=nwc.wallet,
+            amount_sat=amount_msats / 1000 if amount_msats else None,
+            memo=memo,
+            absolute_expiry=absolute_expiry,
+            single_use=single_use,
+            )
+
+    res = {
+        "bolt12": offer.bolt12,
+        "memo": offer.memo,
+        "amount": offer.amount,
+        "offer_id": offer.offer_id,
+        "active": offer.active,
+        "single_use": offer.single_use,
+        "created_at": int(offer.created_at.timestamp()),
+        "metadata": {},
+    }
+    return [(res, None, [])]
 
 
 async def _on_make_invoice(
@@ -503,6 +555,7 @@ async def handle_nwc():
     nwcsp = NWCServiceProvider(priv_key, relay, handle_missed_events)
     nwcsp.add_request_listener("pay_invoice", _on_pay_invoice)
     nwcsp.add_request_listener("multi_pay_invoice", _on_multi_pay_invoice)
+    nwcsp.add_request_listener("make_offer", _on_make_offer)
     nwcsp.add_request_listener("make_invoice", _on_make_invoice)
     nwcsp.add_request_listener("lookup_invoice", _on_lookup_invoice)
     nwcsp.add_request_listener("list_transactions", _on_list_transactions)

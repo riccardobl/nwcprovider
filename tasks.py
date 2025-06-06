@@ -4,7 +4,7 @@ from math import ceil
 from typing import Any, Dict, List, Optional, Tuple
 
 from bolt11 import decode as bolt11_decode
-from lnbits.core.crud import get_payments, get_wallet, get_wallet_payment
+from lnbits.core.crud import get_standalone_offer, get_payments, get_wallet, get_wallet_payment
 from lnbits.core.models import Payment
 from lnbits.core.services import (
     check_transaction_status,
@@ -265,6 +265,48 @@ async def _on_make_offer(
             absolute_expiry=absolute_expiry,
             single_use=single_use,
             )
+
+    res = {
+        "bolt12": offer.bolt12,
+        "memo": offer.memo,
+        "amount": offer.amount,
+        "offer_id": offer.offer_id,
+        "active": offer.active,
+        "single_use": offer.single_use,
+        "created_at": int(offer.created_at.timestamp()),
+        "metadata": {},
+    }
+    return [(res, None, [])]
+
+
+async def _on_lookup_offer(
+    sp: NWCServiceProvider, pubkey: str, payload: Dict
+) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
+
+    # hardening #
+    assert_valid_pubkey(pubkey)
+    # ## #
+
+    nwc = await get_nwc(GetNWC(pubkey=pubkey, refresh_last_used=True))
+    error = await _check(nwc, "lookup_offer")
+    if error:
+        return [(None, error, [])]
+    if not nwc:
+        raise Exception("Pubkey has no associated wallet")
+    params = payload.get("params", {})
+    offer_id = params.get("offer_id", None)
+    # Ensure offer_id is provided
+    if not offer_id:
+        raise Exception("Missing offer_id")
+
+    # hardening #
+    assert_valid_sha256(offer_id)
+    # ## #
+
+    offer = await get_standalone_offer(offer_id = offer_id, wallet_id = nwc.wallet)
+
+    if not offer:
+        raise Exception("Offer not found")
 
     res = {
         "bolt12": offer.bolt12,
@@ -556,6 +598,7 @@ async def handle_nwc():
     nwcsp.add_request_listener("pay_invoice", _on_pay_invoice)
     nwcsp.add_request_listener("multi_pay_invoice", _on_multi_pay_invoice)
     nwcsp.add_request_listener("make_offer", _on_make_offer)
+    nwcsp.add_request_listener("lookup_offer", _on_lookup_offer)
     nwcsp.add_request_listener("make_invoice", _on_make_invoice)
     nwcsp.add_request_listener("lookup_invoice", _on_lookup_invoice)
     nwcsp.add_request_listener("list_transactions", _on_list_transactions)

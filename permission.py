@@ -14,6 +14,11 @@ nwc_permissions = {
         "methods": ["make_offer"],
         "default": True,
     },
+    "lookup_offer": {
+        "name": "Lookup status of offer",
+        "methods": ["lookup_offer"],
+        "default": True,
+    },
     "invoice": {
         "name": "Create invoices",
         "methods": ["make_invoice"],

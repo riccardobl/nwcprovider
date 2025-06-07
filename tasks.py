@@ -338,7 +338,7 @@ async def _on_list_offers(
         raise Exception("Pubkey has no associated wallet")
     params = payload.get("params", {})
     tfrom = params.get("from", 0)
-    tto = params.get("to", int(time.time()))
+    tuntil = params.get("until", int(time.time()))
     limit = params.get("limit", 10)
     offset = params.get("offset", 0)
     active = params.get("active", None)
@@ -347,7 +347,7 @@ async def _on_list_offers(
 
     # hardening #
     assert_valid_positive_int(tfrom)
-    assert_valid_positive_int(tto)
+    assert_valid_positive_int(tuntil)
     assert_valid_positive_int(limit)
     assert_valid_positive_int(offset)
 
@@ -364,7 +364,7 @@ async def _on_list_offers(
     values = []
     filters: Filters = Filters()
     filters.where(["created_at <= ?"])
-    values.append(tto)
+    values.append(tuntil)
     filters.values(values)
     history = await get_offers(
         wallet_id=nwc.wallet,

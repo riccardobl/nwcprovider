@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from bolt11 import decode as bolt11_decode
 from lnbits.core.crud import get_standalone_offer, get_offers, get_payments, get_wallet, get_wallet_payment
-from lnbits.core.models import Payment
+from lnbits.core.models import Offer, Payment
 from lnbits.core.services import (
     check_transaction_status,
     create_offer,
@@ -227,6 +227,18 @@ async def _on_multi_pay_invoice(
     # await log_nwc(pubkey, payload)
     return results
 
+def _offer_to_dict(offer: Offer) -> Dict:
+    return {
+        "bolt12": offer.bolt12,
+        "memo": offer.memo,
+        "amount": offer.amount,
+        "offer_id": offer.offer_id,
+        "active": offer.active,
+        "single_use": offer.single_use,
+        "used": offer.used,
+        "created_at": int(offer.created_at.timestamp()),
+        "metadata": {},
+    }
 
 async def _on_make_offer(
     sp: NWCServiceProvider, pubkey: str, payload: Dict
@@ -266,18 +278,7 @@ async def _on_make_offer(
             single_use=single_use,
             )
 
-    res = {
-        "bolt12": offer.bolt12,
-        "memo": offer.memo,
-        "amount": offer.amount,
-        "offer_id": offer.offer_id,
-        "active": offer.active,
-        "single_use": offer.single_use,
-        "used": offer.used,
-        "created_at": int(offer.created_at.timestamp()),
-        "metadata": {},
-    }
-    return [(res, None, [])]
+    return [(_offer_to_dict(offer), None, [])]
 
 
 async def _on_lookup_offer(
@@ -309,18 +310,7 @@ async def _on_lookup_offer(
     if not offer:
         raise Exception("Offer not found")
 
-    res = {
-        "bolt12": offer.bolt12,
-        "memo": offer.memo,
-        "amount": offer.amount,
-        "offer_id": offer.offer_id,
-        "active": offer.active,
-        "single_use": offer.single_use,
-        "used": offer.used,
-        "created_at": int(offer.created_at.timestamp()),
-        "metadata": {},
-    }
-    return [(res, None, [])]
+    return [(_offer_to_dict(res), None, [])]
 
 
 async def _on_list_offers(
@@ -379,19 +369,7 @@ async def _on_list_offers(
     offers: List[Dict] = []
     o: Offer
     for o in history:
-        offers.append(
-            {
-                "bolt12": o.bolt12,
-                "memo": o.memo,
-                "amount": o.amount,
-                "offer_id": o.offer_id,
-                "active": o.active,
-                "single_use": o.single_use,
-                "used": o.used,
-                "created_at": int(o.created_at.timestamp()),
-                "metadata": {},
-            }
-        )
+        offers.append(_offer_to_dict(o))
     # await log_nwc(pubkey, payload)
     return [({"offers": offers}, None, [])]
 

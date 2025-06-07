@@ -4,7 +4,7 @@ from math import ceil
 from typing import Any, Dict, List, Optional, Tuple
 
 from bolt11 import decode as bolt11_decode
-from lnbits.core.crud import get_standalone_offer, get_payments, get_wallet, get_wallet_payment
+from lnbits.core.crud import get_standalone_offer, get_offers, get_payments, get_wallet, get_wallet_payment
 from lnbits.core.models import Payment
 from lnbits.core.services import (
     check_transaction_status,
@@ -273,6 +273,7 @@ async def _on_make_offer(
         "offer_id": offer.offer_id,
         "active": offer.active,
         "single_use": offer.single_use,
+        "used": offer.used,
         "created_at": int(offer.created_at.timestamp()),
         "metadata": {},
     }
@@ -315,10 +316,84 @@ async def _on_lookup_offer(
         "offer_id": offer.offer_id,
         "active": offer.active,
         "single_use": offer.single_use,
+        "used": offer.used,
         "created_at": int(offer.created_at.timestamp()),
         "metadata": {},
     }
     return [(res, None, [])]
+
+
+async def _on_list_offers(
+    sp: NWCServiceProvider, pubkey: str, payload: Dict
+) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
+    # hardening #
+    assert_valid_pubkey(pubkey)
+    # ## #
+
+    nwc = await get_nwc(GetNWC(pubkey=pubkey, refresh_last_used=True))
+    error = await _check(nwc, "list_offers")
+    if error:
+        return [(None, error, [])]
+    if not nwc:
+        raise Exception("Pubkey has no associated wallet")
+    params = payload.get("params", {})
+    tfrom = params.get("from", 0)
+    tto = params.get("to", int(time.time()))
+    limit = params.get("limit", 10)
+    offset = params.get("offset", 0)
+    active = params.get("active", None)
+    single_use = params.get("single_use", None)
+    used = params.get("used", None)
+
+    # hardening #
+    assert_valid_positive_int(tfrom)
+    assert_valid_positive_int(tto)
+    assert_valid_positive_int(limit)
+    assert_valid_positive_int(offset)
+
+    if active is not None:
+        assert_boolean(active_only)
+
+    if single_use is not None:
+        assert_boolean(single_use)
+
+    if used is not None:
+        assert_boolean(used)
+    # ## #
+
+    values = []
+    filters: Filters = Filters()
+    filters.where(["created_at <= ?"])
+    values.append(tto)
+    filters.values(values)
+    history = await get_offers(
+        wallet_id=nwc.wallet,
+        active=active,
+        single_use=single_use,
+        used=used,
+        since=tfrom,
+        filters=filters,
+        limit=limit,
+        offset=offset,
+    )
+    offers: List[Dict] = []
+    o: Offer
+    for o in history:
+        offers.append(
+            {
+                "bolt12": o.bolt12,
+                "memo": o.memo,
+                "amount": o.amount,
+                "offer_id": o.offer_id,
+                "active": o.active,
+                "single_use": o.single_use,
+                "used": o.used,
+                "created_at": int(o.created_at.timestamp()),
+                "metadata": {},
+            }
+        )
+    # await log_nwc(pubkey, payload)
+    return [({"offers": offers}, None, [])]
 
 
 async def _on_make_invoice(
@@ -599,6 +674,7 @@ async def handle_nwc():
     nwcsp.add_request_listener("multi_pay_invoice", _on_multi_pay_invoice)
     nwcsp.add_request_listener("make_offer", _on_make_offer)
     nwcsp.add_request_listener("lookup_offer", _on_lookup_offer)
+    nwcsp.add_request_listener("list_offers", _on_list_offers)
     nwcsp.add_request_listener("make_invoice", _on_make_invoice)
     nwcsp.add_request_listener("lookup_invoice", _on_lookup_invoice)
     nwcsp.add_request_listener("list_transactions", _on_list_transactions)

@@ -19,6 +19,11 @@ nwc_permissions = {
         "methods": ["lookup_offer"],
         "default": True,
     },
+    "enable_disable_offer": {
+        "name": "Enabling/disabling an offer",
+        "methods": ["enable_offer", "disable_offer"],
+        "default": True,
+    },
     "list_offers": {
         "name": "Read list of offers",
         "methods": ["list_offers"],

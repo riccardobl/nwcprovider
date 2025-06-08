@@ -9,6 +9,8 @@ from lnbits.core.models import Offer, Payment
 from lnbits.core.services import (
     check_transaction_status,
     create_offer,
+    enable_offer,
+    disable_offer,
     create_invoice,
     pay_invoice,
 )
@@ -228,7 +230,7 @@ async def _on_multi_pay_invoice(
     return results
 
 def _offer_to_dict(offer: Offer) -> Dict:
-    return {
+    res = {
         "bolt12": offer.bolt12,
         "memo": offer.memo,
         "amount": offer.amount,
@@ -237,8 +239,14 @@ def _offer_to_dict(offer: Offer) -> Dict:
         "single_use": offer.single_use,
         "used": offer.used,
         "created_at": int(offer.created_at.timestamp()),
-        "metadata": {},
+        "updated_at": int(offer.updated_at.timestamp()),
     }
+
+    if(offer.expiry is not None):
+        res["expires_at"] = int(offer.expiry.timestamp())
+
+    res["metadata"] = {}
+    return res
 
 async def _on_make_offer(
     sp: NWCServiceProvider, pubkey: str, payload: Dict
@@ -310,7 +318,81 @@ async def _on_lookup_offer(
     if not offer:
         raise Exception("Offer not found")
 
-    return [(_offer_to_dict(res), None, [])]
+    return [(_offer_to_dict(offer), None, [])]
+
+
+async def _on_enable_offer(
+    sp: NWCServiceProvider, pubkey: str, payload: Dict
+) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
+
+    # hardening #
+    assert_valid_pubkey(pubkey)
+    # ## #
+
+    nwc = await get_nwc(GetNWC(pubkey=pubkey, refresh_last_used=True))
+    error = await _check(nwc, "enable_offer")
+    if error:
+        return [(None, error, [])]
+    if not nwc:
+        raise Exception("Pubkey has no associated wallet")
+    params = payload.get("params", {})
+    offer_id = params.get("offer_id", None)
+    # Ensure offer_id is provided
+    if not offer_id:
+        raise Exception("Missing offer_id")
+
+    # hardening #
+    assert_valid_sha256(offer_id)
+    # ## #
+
+    result = await enable_offer(wallet_id = nwc.wallet, offer_id = offer_id)
+
+    if result is None:
+        raise Exception("Offer not found")
+
+    res = {
+        "offer_id": offer_id,
+        "active": result
+    }
+
+    return [(res, None, [])]
+
+
+async def _on_disable_offer(
+    sp: NWCServiceProvider, pubkey: str, payload: Dict
+) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
+
+    # hardening #
+    assert_valid_pubkey(pubkey)
+    # ## #
+
+    nwc = await get_nwc(GetNWC(pubkey=pubkey, refresh_last_used=True))
+    error = await _check(nwc, "disable_offer")
+    if error:
+        return [(None, error, [])]
+    if not nwc:
+        raise Exception("Pubkey has no associated wallet")
+    params = payload.get("params", {})
+    offer_id = params.get("offer_id", None)
+    # Ensure offer_id is provided
+    if not offer_id:
+        raise Exception("Missing offer_id")
+
+    # hardening #
+    assert_valid_sha256(offer_id)
+    # ## #
+
+    result = await disable_offer(wallet_id = nwc.wallet, offer_id = offer_id)
+
+    if result is None:
+        raise Exception("Offer not found")
+
+    res = {
+        "offer_id": offer_id,
+        "active": result
+    }
+
+    return [(res, None, [])]
 
 
 async def _on_list_offers(
@@ -653,6 +735,8 @@ async def handle_nwc():
     nwcsp.add_request_listener("multi_pay_invoice", _on_multi_pay_invoice)
     nwcsp.add_request_listener("make_offer", _on_make_offer)
     nwcsp.add_request_listener("lookup_offer", _on_lookup_offer)
+    nwcsp.add_request_listener("enable_offer", _on_enable_offer)
+    nwcsp.add_request_listener("disable_offer", _on_disable_offer)
     nwcsp.add_request_listener("list_offers", _on_list_offers)
     nwcsp.add_request_listener("make_invoice", _on_make_invoice)
     nwcsp.add_request_listener("lookup_invoice", _on_lookup_invoice)

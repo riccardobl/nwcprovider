@@ -11,13 +11,15 @@ from lnbits.core.services import (
     create_offer,
     enable_offer,
     disable_offer,
+    fetch_invoice,
     create_invoice,
     pay_invoice,
 )
 from lnbits.db import Filters
 from lnbits.exceptions import PaymentError
 from lnbits.settings import settings
-from lnbits.wallets.base import PaymentStatus
+from lnbits.wallets.base import PaymentStatus, InvoiceData
+from lnbits.wallets import get_funding_source
 from loguru import logger
 
 from .crud import get_config_nwc, get_nwc, tracked_spend_nwc
@@ -28,6 +30,7 @@ from .paranoia import (
     assert_boolean,
     assert_sane_string,
     assert_valid_bolt11,
+    assert_valid_bolt12,
     assert_valid_expiration_seconds,
     assert_valid_msats,
     assert_valid_positive_int,
@@ -231,7 +234,7 @@ async def _on_multi_pay_invoice(
 
 def _offer_to_dict(offer: Offer) -> Dict:
     res = {
-        "bolt12": offer.bolt12,
+        "offer": offer.bolt12,
         "memo": offer.memo,
         "amount": offer.amount,
         "offer_id": offer.offer_id,
@@ -242,7 +245,7 @@ def _offer_to_dict(offer: Offer) -> Dict:
         "updated_at": int(offer.updated_at.timestamp()),
     }
 
-    if(offer.expiry is not None):
+    if offer.expiry is not None:
         res["expires_at"] = int(offer.expiry.timestamp())
 
     res["metadata"] = {}
@@ -280,7 +283,7 @@ async def _on_make_offer(
 
     offer = await create_offer(
             wallet_id=nwc.wallet,
-            amount_sat=amount_msats / 1000 if amount_msats else None,
+            amount_sat=amount_msats * 0.001 if amount_msats is not None else None,
             memo=memo,
             absolute_expiry=absolute_expiry,
             single_use=single_use,
@@ -454,6 +457,68 @@ async def _on_list_offers(
         offers.append(_offer_to_dict(o))
     # await log_nwc(pubkey, payload)
     return [({"offers": offers}, None, [])]
+
+
+async def _on_fetch_invoice(
+    sp: NWCServiceProvider, pubkey: str, payload: Dict
+) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
+
+    # hardening #
+    assert_valid_pubkey(pubkey)
+    # ## #
+
+    nwc = await get_nwc(GetNWC(pubkey=pubkey, refresh_last_used=True))
+    error = await _check(nwc, "fetch_invoice")
+    if error:
+        return [(None, error, [])]
+    if not nwc:
+        raise Exception("Pubkey has no associated wallet")
+    logger.debug(payload)
+    params = payload.get("params", {})
+    offer = params.get("offer", None)
+    # Ensure offer_id is provided
+    if not offer:
+        raise Exception("Missing offer")
+    amount_msat = params.get("amount", None)
+    payer_note = params.get("payer_note", None)
+
+    # hardening #
+    assert_valid_bolt12(offer)
+    if amount_msat is not None:
+        assert_valid_msats(amount_msat)
+    if payer_note is not None:
+        assert_sane_string(payer_note)
+    # ## #
+
+    bolt12 = await fetch_invoice(
+                wallet_id = nwc.wallet,
+                offer = offer,
+                amount = amount_msat * 0.001 if amount_msat is not None else None,
+                payer_note = payer_note)
+
+    funding_source = get_funding_source()
+
+    invoice = await funding_source.decode_invoice(bolt12)
+
+    res = {
+        "invoice": bolt12,
+    }
+
+    if invoice.description:
+        res["description"] = invoice.description
+    if invoice.description_hash:
+        res["description_hash"] = invoice.description_hash
+    if invoice.payer_note:
+        res["payer_note"] = invoice.payer_note
+    res["payment_hash"] = invoice.payment_hash
+    if invoice.amount_msat:
+        res["amount"] = invoice.amount_msat
+    if invoice.offer_id:
+        res["offer_id"] = invoice.offer_id
+    res["created_at"] = int(invoice.invoice_created_at)
+    if invoice.invoice_relative_expiry:
+        res["expires_at"] = int(invoice.invoice_created_at) + int(invoice.invoice_relative_expiry)
+    return [(res, None, [])]
 
 
 async def _on_make_invoice(
@@ -738,6 +803,7 @@ async def handle_nwc():
     nwcsp.add_request_listener("enable_offer", _on_enable_offer)
     nwcsp.add_request_listener("disable_offer", _on_disable_offer)
     nwcsp.add_request_listener("list_offers", _on_list_offers)
+    nwcsp.add_request_listener("fetch_invoice", _on_fetch_invoice)
     nwcsp.add_request_listener("make_invoice", _on_make_invoice)
     nwcsp.add_request_listener("lookup_invoice", _on_lookup_invoice)
     nwcsp.add_request_listener("list_transactions", _on_list_transactions)

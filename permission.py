@@ -2,6 +2,7 @@ nwc_permissions = {
     "pay": {
         "name": "Send payments",
         "methods": [
+            "fetch_invoice",
             "multi_pay_invoice",
             "pay_invoice",
             "pay_keysend",

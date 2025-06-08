@@ -162,6 +162,13 @@ def assert_valid_bolt11(invoice: str):
     assert_printable(invoice)
 
 
+# Check if string is a valid bolt12 string
+def assert_valid_bolt12(bolt12: str):
+    if not ENABLE_HARDENING:
+        return
+    assert_printable(bolt12)
+
+
 # Check if boolean
 def assert_boolean(v: bool):
     if not ENABLE_HARDENING:

@@ -153,7 +153,6 @@ async def _on_pay_invoice(
     if not invoice:
         raise Exception("Missing invoice")
     # hardening #
-    # hardening #
     assert_valid_bolt12(invoice)
     # ## #
 

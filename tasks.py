@@ -473,7 +473,6 @@ async def _on_fetch_invoice(
         return [(None, error, [])]
     if not nwc:
         raise Exception("Pubkey has no associated wallet")
-    logger.debug(payload)
     params = payload.get("params", {})
     offer = params.get("offer", None)
     # Ensure offer_id is provided
@@ -611,23 +610,31 @@ async def _on_lookup_invoice(
     # Ensure payment_hash or invoice are provided
     if not payment_hash and not invoice:
         raise Exception("Missing payment_hash or invoice")
+    funding_source = get_funding_source()
+
     # Extract hash from invoice if not provided
     if not payment_hash:
-        invoice_data = bolt11_decode(invoice)
+        invoice_data = await funding_source.decode_invoice(invoice)
+
+        if not invoice_data:
+            raise Exception("Invalid invoice")
         payment_hash = invoice_data.payment_hash
 
     # hardening #
     assert_valid_sha256(payment_hash)
-    assert_valid_bolt11(invoice)
+    assert_valid_bolt12(invoice)
     # ## #
 
     # Get payment data
     payment = await get_wallet_payment(nwc.wallet, payment_hash)
     if not payment:
         raise Exception("Payment not found")
-    invoice_data = bolt11_decode(payment.bolt11)
+    invoice_data = await funding_source.decode_invoice(invoice)
+
+    if not invoice_data:
+        raise Exception("Invalid invoice")
     is_settled = not payment.pending
-    timestamp = int(payment.time.timestamp()) or int(invoice_data.date)
+    timestamp = int(payment.time.timestamp()) or int(invoice_data.invoice_created_at)
     expiry = int(payment.expiry.timestamp()) or timestamp + 3600
     preimage = (
         payment.preimage

@@ -152,11 +152,19 @@ async def _on_pay_invoice(
     # Ensures invoice is provided
     if not invoice:
         raise Exception("Missing invoice")
-    invoice_data = bolt11_decode(invoice)
+    # hardening #
+    # hardening #
+    assert_valid_bolt12(invoice)
+    # ## #
+
+    funding_source = get_funding_source()
+    invoice_data = await funding_source.decode_invoice(invoice)
+
+    if not invoice_data:
+       raise Exception("Invalid invoice " + invoice)
     amount_msats = int(invoice_data.amount_msat or 0)
 
     # hardening #
-    assert_valid_bolt11(invoice)
     assert_valid_msats(amount_msats)
     # ## #
 
@@ -192,6 +200,8 @@ async def _on_multi_pay_invoice(
     invoices = params.get("invoices", [])
     results: List[Tuple[Optional[Dict], Optional[Dict], List]] = []
 
+    funding_source = get_funding_source()
+
     # Ensures all invoices are provided
     for i in invoices:
         invoice = i.get("invoice", None)
@@ -202,11 +212,18 @@ async def _on_multi_pay_invoice(
         try:
             invoice_id = i.get("id", None)
             invoice = i.get("invoice", None)
-            invoice_data = bolt11_decode(invoice)
+
+            # hardening #
+            assert_valid_bolt12(invoice)
+            # ## #
+
+            invoice_data = await funding_source.decode_invoice(invoice)
+
+            if not invoice_data:
+                raise Exception("Invalid invoice " + invoice)
             amount_msats = int(invoice_data.amount_msat or 0)
 
             # hardening #
-            assert_valid_bolt11(invoice)
             assert_valid_msats(amount_msats)
             if invoice_id:
                 assert_sane_string(invoice_id)
@@ -617,7 +634,7 @@ async def _on_lookup_invoice(
         invoice_data = await funding_source.decode_invoice(invoice)
 
         if not invoice_data:
-            raise Exception("Invalid invoice")
+            raise Exception("Invalid invoice " + invoice)
         payment_hash = invoice_data.payment_hash
 
     # hardening #
@@ -632,7 +649,7 @@ async def _on_lookup_invoice(
     invoice_data = await funding_source.decode_invoice(invoice)
 
     if not invoice_data:
-        raise Exception("Invalid invoice")
+        raise Exception("Invalid invoice " + invoice)
     is_settled = not payment.pending
     timestamp = int(payment.time.timestamp()) or int(invoice_data.invoice_created_at)
     expiry = int(payment.expiry.timestamp()) or timestamp + 3600

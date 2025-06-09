@@ -627,6 +627,7 @@ async def test_multi_pay_invoices():
     assert not error
     assert result["invoice"]
     invoice3 = result["invoice"]
+    invoice3_payhash = result["payment_hash"]
 
     await wallet3.send_event(
         "multi_pay_invoice",
@@ -645,7 +646,7 @@ async def test_multi_pay_invoices():
         assert result["preimage"]
     elif d_tag == "invoice2":
         assert result["preimage"]
-    elif d_tag == invoice3:
+    elif d_tag == invoice3_payhash:
         assert result["preimage"]
     else:
         raise AssertionError("Unexpected d tag")

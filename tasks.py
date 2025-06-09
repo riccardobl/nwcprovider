@@ -628,6 +628,10 @@ async def _on_lookup_invoice(
         raise Exception("Missing payment_hash or invoice")
     funding_source = get_funding_source()
 
+    # hardening #
+    assert_valid_bolt12(invoice)
+    # ## #
+
     # Extract hash from invoice if not provided
     if not payment_hash:
         invoice_data = await funding_source.decode_invoice(invoice)
@@ -638,7 +642,6 @@ async def _on_lookup_invoice(
 
     # hardening #
     assert_valid_sha256(payment_hash)
-    assert_valid_bolt12(invoice)
     # ## #
 
     # Get payment data

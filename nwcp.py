@@ -219,7 +219,6 @@ class NWCServiceProvider:
             return
         await self._wait_for_connection()  # ensure the connection is established
         tx = self._json_dumps(data)
-        logger.debug(tx)
         await self.ws.send(tx)
 
     def _get_new_subid(self) -> str:
@@ -494,7 +493,6 @@ class NWCServiceProvider:
                     ):  # receive messages until the instance is shutting down
                         try:
                             reply = await ws.recv()
-                            logger.debug(reply)
                             if isinstance(reply, bytes):
                                 reply = reply.decode("utf-8")
                             await self._on_message(ws, reply)

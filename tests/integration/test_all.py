@@ -183,7 +183,11 @@ class NWCWallet:
 
     async def _wait_for_connection(self):
         while not self.connected:
-            await asyncio.sleep(0.2)
+            try:
+                await asyncio.sleep(0.2)
+            except asyncio.CancelledError:
+                logger.debug("Connection wait cancelled")
+                return
 
     async def start(self):
         self.task = asyncio.create_task(self._run())
@@ -335,7 +339,7 @@ class NWCWallet:
         await self.ws.send(self._json_dumps(["EVENT", event]))
 
     async def wait_for(
-        self, result_type, callback=None, on_error_callback=None, timeout=60
+        self, result_type, callback=None, on_error_callback=None, timeout=60000
     ):
         now = time.time()
         while True:
@@ -992,3 +996,130 @@ async def create_valid_invoice(wallet, amount=1000):
     if error:
         raise Exception(f"Failed to create invoice: {error}")
     return result["invoice"]
+
+@pytest.mark.asyncio
+async def test_list_transactions():
+    # Create wallets with required permissions
+    nwc1 = await create_nwc(
+        "wallet1", "test_list_transactions", ["invoice", "pay", "balance", "history"], [], 0
+    )
+    nwc2 = await create_nwc(
+        "wallet2", "test_list_transactions", ["invoice", "pay", "balance", "history"], [], 0
+    )
+    
+    wallet1 = NWCWallet(nwc1["pairing"])
+    wallet2 = NWCWallet(nwc2["pairing"])
+    
+    await wallet1.start()
+    await wallet2.start()
+    
+    # Create some transactions with different timestamps
+    start_time = int(time.time())
+    
+    # First invoice
+    await wallet1.send_event(
+        "make_invoice", {"amount": 100000, "description": "test invoice 1"}
+    )
+    result1, _, error = await wallet1.wait_for("make_invoice")
+    assert not error
+    invoice1 = result1["invoice"]
+    
+    # Pay first invoice
+    await wallet2.send_event("pay_invoice", {"invoice": invoice1})
+    _, _, error = await wallet2.wait_for("pay_invoice")
+    assert not error
+    
+    mid_timestamp = int(time.time())
+    
+    # Second invoice
+    await wallet1.send_event(
+        "make_invoice", {"amount": 200000, "description": "test invoice 2"}
+    )
+    result2, _, error = await wallet1.wait_for("make_invoice")
+    assert not error
+    invoice2 = result2["invoice"]
+    
+    # Pay second invoice
+    await wallet2.send_event("pay_invoice", {"invoice": invoice2})
+    _, _, error = await wallet2.wait_for("pay_invoice")
+    assert not error
+    
+    # Create an unpaid invoice
+    await wallet1.send_event(
+        "make_invoice", {"amount": 300000, "description": "test invoice 3 (unpaid)"}
+    )
+    _, _, error = await wallet1.wait_for("make_invoice")
+    assert not error
+    
+    end_time = int(time.time())
+    
+    # Test 1: List all transactions
+    await wallet1.send_event("list_transactions", {})
+    result, _, error = await wallet1.wait_for("list_transactions")
+    assert not error
+    assert "transactions" in result
+    transactions = result["transactions"]
+    
+    # Should have at least 2 paid invoices
+    assert len(transactions) >= 2
+    
+    # Verify transaction structure
+    for tx in transactions:
+        assert "type" in tx
+        assert "amount" in tx
+        assert "created_at" in tx
+        assert "payment_hash" in tx
+    
+    # Test 2: Filter by type (incoming)
+    await wallet1.send_event("list_transactions", {"type": "incoming"})
+    result, _, error = await wallet1.wait_for("list_transactions")
+    assert not error
+    incoming_txs = result["transactions"]
+    assert all(tx["type"] == "incoming" for tx in incoming_txs)
+    
+    # Test 3: Filter by time range
+    await wallet1.send_event(
+        "list_transactions", {"from": start_time, "until": mid_timestamp}
+    )
+    result, _, error = await wallet1.wait_for("list_transactions")
+    assert not error
+    early_txs = result["transactions"]
+    # Should only include transactions from the first time period
+    for tx in early_txs:
+        assert tx["created_at"] >= start_time
+        assert tx["created_at"] <= mid_timestamp
+    
+    # Test 4: Test limit and offset
+    await wallet1.send_event("list_transactions", {"limit": 1})
+    result, _, error = await wallet1.wait_for("list_transactions")
+    assert not error
+    limited_txs = result["transactions"]
+    assert len(limited_txs) == 1
+    
+    await wallet1.send_event("list_transactions", {"limit": 1, "offset": 1})
+    result, _, error = await wallet1.wait_for("list_transactions")
+    assert not error
+    offset_txs = result["transactions"]
+    assert len(offset_txs) == 1
+    # Should be different transactions
+    assert offset_txs[0]["payment_hash"] != limited_txs[0]["payment_hash"]
+    
+    # Test 5: Include unpaid invoices
+    await wallet1.send_event("list_transactions", {"unpaid": True})
+    result, _, error = await wallet1.wait_for("list_transactions")
+    assert not error
+    all_txs = result["transactions"]
+    # Should find at least one unpaid invoice
+    assert any(tx.get("settled_at") is None for tx in all_txs)
+    
+    # Test 6: Check outgoing transactions from wallet2
+    await wallet2.send_event("list_transactions", {"type": "outgoing"})
+    result, _, error = await wallet2.wait_for("list_transactions")
+    assert not error
+    outgoing_txs = result["transactions"]
+    assert all(tx["type"] == "outgoing" for tx in outgoing_txs)
+    assert len(outgoing_txs) >= 2
+    
+    # Cleanup
+    await wallet1.close()
+    await wallet2.close()

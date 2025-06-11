@@ -251,7 +251,7 @@ async def _on_multi_pay_invoice(
 def _offer_to_dict(offer: Offer) -> Dict:
     res = {
         "offer": offer.bolt12,
-        "memo": offer.memo,
+        "description": offer.memo,
         "amount": offer.amount,
         "offer_id": offer.offer_id,
         "active": offer.active,
@@ -283,15 +283,15 @@ async def _on_make_offer(
         raise Exception("Pubkey has no associated wallet")
     params = payload.get("params", {})
     amount_msats = params.get("amount", None)
-    memo = params.get("memo", "")
+    description = params.get("description", "")
     absolute_expiry = params.get("absolute_expiry", None)
     single_use = params.get("single_use", False)
 
     # hardening #
     if amount_msats is not None:
         assert_valid_msats(amount_msats)
-    if memo:
-        assert_sane_string(memo)
+    if description:
+        assert_sane_string(description)
     if absolute_expiry:
         assert_valid_expiration_seconds(absolute_expiry)
     assert_boolean(single_use)
@@ -300,7 +300,7 @@ async def _on_make_offer(
     offer = await create_offer(
             wallet_id=nwc.wallet,
             amount_sat=amount_msats * 0.001 if amount_msats is not None else None,
-            memo=memo,
+            memo=description,
             absolute_expiry=absolute_expiry,
             single_use=single_use,
             )

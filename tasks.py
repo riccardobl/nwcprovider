@@ -4,17 +4,22 @@ from math import ceil
 from typing import Any, Dict, List, Optional, Tuple
 
 from bolt11 import decode as bolt11_decode
-from lnbits.core.crud import get_payments, get_wallet, get_wallet_payment
-from lnbits.core.models import Payment
+from lnbits.core.crud import get_standalone_offer, get_offers, get_payments, get_wallet, get_wallet_payment
+from lnbits.core.models import Offer, Payment
 from lnbits.core.services import (
     check_transaction_status,
+    create_offer,
+    enable_offer,
+    disable_offer,
+    fetch_invoice,
     create_invoice,
     pay_invoice,
 )
 from lnbits.db import Filters
 from lnbits.exceptions import PaymentError
 from lnbits.settings import settings
-from lnbits.wallets.base import PaymentStatus
+from lnbits.wallets.base import PaymentStatus, InvoiceData
+from lnbits.wallets import get_funding_source
 from loguru import logger
 
 from .crud import get_config_nwc, get_nwc, tracked_spend_nwc
@@ -25,6 +30,7 @@ from .paranoia import (
     assert_boolean,
     assert_sane_string,
     assert_valid_bolt11,
+    assert_valid_bolt12,
     assert_valid_expiration_seconds,
     assert_valid_msats,
     assert_valid_positive_int,
@@ -146,11 +152,18 @@ async def _on_pay_invoice(
     # Ensures invoice is provided
     if not invoice:
         raise Exception("Missing invoice")
-    invoice_data = bolt11_decode(invoice)
+    # hardening #
+    assert_valid_bolt12(invoice)
+    # ## #
+
+    funding_source = get_funding_source()
+    invoice_data = await funding_source.decode_invoice(invoice)
+
+    if not invoice_data:
+       raise Exception("Invalid invoice " + invoice)
     amount_msats = int(invoice_data.amount_msat or 0)
 
     # hardening #
-    assert_valid_bolt11(invoice)
     assert_valid_msats(amount_msats)
     # ## #
 
@@ -186,6 +199,8 @@ async def _on_multi_pay_invoice(
     invoices = params.get("invoices", [])
     results: List[Tuple[Optional[Dict], Optional[Dict], List]] = []
 
+    funding_source = get_funding_source()
+
     # Ensures all invoices are provided
     for i in invoices:
         invoice = i.get("invoice", None)
@@ -196,11 +211,18 @@ async def _on_multi_pay_invoice(
         try:
             invoice_id = i.get("id", None)
             invoice = i.get("invoice", None)
-            invoice_data = bolt11_decode(invoice)
+
+            # hardening #
+            assert_valid_bolt12(invoice)
+            # ## #
+
+            invoice_data = await funding_source.decode_invoice(invoice)
+
+            if not invoice_data:
+                raise Exception("Invalid invoice " + invoice)
             amount_msats = int(invoice_data.amount_msat or 0)
 
             # hardening #
-            assert_valid_bolt11(invoice)
             assert_valid_msats(amount_msats)
             if invoice_id:
                 assert_sane_string(invoice_id)
@@ -225,6 +247,293 @@ async def _on_multi_pay_invoice(
             results.append((None, {"code": "INTERNAL", "message": str(e)}, []))
     # await log_nwc(pubkey, payload)
     return results
+
+def _offer_to_dict(offer: Offer) -> Dict:
+    res = {
+        "offer": offer.bolt12,
+        "description": offer.memo,
+        "amount": offer.amount,
+        "offer_id": offer.offer_id,
+        "active": offer.active,
+        "single_use": offer.single_use,
+        "used": offer.used,
+        "created_at": int(offer.created_at.timestamp()),
+        "updated_at": int(offer.updated_at.timestamp()),
+    }
+
+    if offer.expiry is not None:
+        res["expires_at"] = int(offer.expiry.timestamp())
+
+    res["metadata"] = {}
+    return res
+
+async def _on_make_offer(
+    sp: NWCServiceProvider, pubkey: str, payload: Dict
+) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
+
+    # hardening #
+    assert_valid_pubkey(pubkey)
+    # ## #
+
+    nwc = await get_nwc(GetNWC(pubkey=pubkey, refresh_last_used=True))
+    error = await _check(nwc, "make_offer")
+    if error:
+        return [(None, error, [])]
+    if not nwc:
+        raise Exception("Pubkey has no associated wallet")
+    params = payload.get("params", {})
+    amount_msats = params.get("amount", None)
+    description = params.get("description", "")
+    absolute_expiry = params.get("absolute_expiry", None)
+    single_use = params.get("single_use", False)
+
+    # hardening #
+    if amount_msats is not None:
+        assert_valid_msats(amount_msats)
+    if description:
+        assert_sane_string(description)
+    if absolute_expiry:
+        assert_valid_expiration_seconds(absolute_expiry)
+    assert_boolean(single_use)
+    # ## #
+
+    offer = await create_offer(
+            wallet_id=nwc.wallet,
+            amount_sat=amount_msats * 0.001 if amount_msats is not None else None,
+            memo=description,
+            absolute_expiry=absolute_expiry,
+            single_use=single_use,
+            )
+
+    return [(_offer_to_dict(offer), None, [])]
+
+
+async def _on_lookup_offer(
+    sp: NWCServiceProvider, pubkey: str, payload: Dict
+) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
+
+    # hardening #
+    assert_valid_pubkey(pubkey)
+    # ## #
+
+    nwc = await get_nwc(GetNWC(pubkey=pubkey, refresh_last_used=True))
+    error = await _check(nwc, "lookup_offer")
+    if error:
+        return [(None, error, [])]
+    if not nwc:
+        raise Exception("Pubkey has no associated wallet")
+    params = payload.get("params", {})
+    offer_id = params.get("offer_id", None)
+    # Ensure offer_id is provided
+    if not offer_id:
+        raise Exception("Missing offer_id")
+
+    # hardening #
+    assert_valid_sha256(offer_id)
+    # ## #
+
+    offer = await get_standalone_offer(offer_id = offer_id, wallet_id = nwc.wallet)
+
+    if not offer:
+        raise Exception("Offer not found")
+
+    return [(_offer_to_dict(offer), None, [])]
+
+
+async def _on_enable_offer(
+    sp: NWCServiceProvider, pubkey: str, payload: Dict
+) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
+
+    # hardening #
+    assert_valid_pubkey(pubkey)
+    # ## #
+
+    nwc = await get_nwc(GetNWC(pubkey=pubkey, refresh_last_used=True))
+    error = await _check(nwc, "enable_offer")
+    if error:
+        return [(None, error, [])]
+    if not nwc:
+        raise Exception("Pubkey has no associated wallet")
+    params = payload.get("params", {})
+    offer_id = params.get("offer_id", None)
+    # Ensure offer_id is provided
+    if not offer_id:
+        raise Exception("Missing offer_id")
+
+    # hardening #
+    assert_valid_sha256(offer_id)
+    # ## #
+
+    result = await enable_offer(wallet_id = nwc.wallet, offer_id = offer_id)
+
+    if result is None:
+        raise Exception("Offer not found")
+
+    res = {
+        "offer_id": offer_id,
+        "active": result
+    }
+
+    return [(res, None, [])]
+
+
+async def _on_disable_offer(
+    sp: NWCServiceProvider, pubkey: str, payload: Dict
+) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
+
+    # hardening #
+    assert_valid_pubkey(pubkey)
+    # ## #
+
+    nwc = await get_nwc(GetNWC(pubkey=pubkey, refresh_last_used=True))
+    error = await _check(nwc, "disable_offer")
+    if error:
+        return [(None, error, [])]
+    if not nwc:
+        raise Exception("Pubkey has no associated wallet")
+    params = payload.get("params", {})
+    offer_id = params.get("offer_id", None)
+    # Ensure offer_id is provided
+    if not offer_id:
+        raise Exception("Missing offer_id")
+
+    # hardening #
+    assert_valid_sha256(offer_id)
+    # ## #
+
+    result = await disable_offer(wallet_id = nwc.wallet, offer_id = offer_id)
+
+    if result is None:
+        raise Exception("Offer not found")
+
+    res = {
+        "offer_id": offer_id,
+        "active": result
+    }
+
+    return [(res, None, [])]
+
+
+async def _on_list_offers(
+    sp: NWCServiceProvider, pubkey: str, payload: Dict
+) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
+    # hardening #
+    assert_valid_pubkey(pubkey)
+    # ## #
+
+    nwc = await get_nwc(GetNWC(pubkey=pubkey, refresh_last_used=True))
+    error = await _check(nwc, "list_offers")
+    if error:
+        return [(None, error, [])]
+    if not nwc:
+        raise Exception("Pubkey has no associated wallet")
+    params = payload.get("params", {})
+    tfrom = params.get("from", 0)
+    tuntil = params.get("until", int(time.time()))
+    limit = params.get("limit", 10)
+    offset = params.get("offset", 0)
+    active = params.get("active", None)
+    single_use = params.get("single_use", None)
+    used = params.get("used", None)
+
+    # hardening #
+    assert_valid_positive_int(tfrom)
+    assert_valid_positive_int(tuntil)
+    assert_valid_positive_int(limit)
+    assert_valid_positive_int(offset)
+
+    if active is not None:
+        assert_boolean(active_only)
+
+    if single_use is not None:
+        assert_boolean(single_use)
+
+    if used is not None:
+        assert_boolean(used)
+    # ## #
+
+    values = []
+    filters: Filters = Filters()
+    filters.where(["created_at <= ?"])
+    values.append(tuntil)
+    filters.values(values)
+    history = await get_offers(
+        wallet_id=nwc.wallet,
+        active=active,
+        single_use=single_use,
+        used=used,
+        since=tfrom,
+        filters=filters,
+        limit=limit,
+        offset=offset,
+    )
+    offers: List[Dict] = []
+    o: Offer
+    for o in history:
+        offers.append(_offer_to_dict(o))
+    # await log_nwc(pubkey, payload)
+    return [({"offers": offers}, None, [])]
+
+
+async def _on_fetch_invoice(
+    sp: NWCServiceProvider, pubkey: str, payload: Dict
+) -> List[Tuple[Optional[Dict], Optional[Dict], List]]:
+
+    # hardening #
+    assert_valid_pubkey(pubkey)
+    # ## #
+
+    nwc = await get_nwc(GetNWC(pubkey=pubkey, refresh_last_used=True))
+    error = await _check(nwc, "fetch_invoice")
+    if error:
+        return [(None, error, [])]
+    if not nwc:
+        raise Exception("Pubkey has no associated wallet")
+    params = payload.get("params", {})
+    offer = params.get("offer", None)
+    # Ensure offer_id is provided
+    if not offer:
+        raise Exception("Missing offer")
+    amount_msat = params.get("amount", None)
+    payer_note = params.get("payer_note", None)
+
+    # hardening #
+    assert_valid_bolt12(offer)
+    if amount_msat is not None:
+        assert_valid_msats(amount_msat)
+    if payer_note is not None:
+        assert_sane_string(payer_note)
+    # ## #
+
+    bolt12 = await fetch_invoice(
+                wallet_id = nwc.wallet,
+                offer = offer,
+                amount = amount_msat * 0.001 if amount_msat is not None else None,
+                payer_note = payer_note)
+
+    funding_source = get_funding_source()
+
+    invoice = await funding_source.decode_invoice(bolt12)
+
+    res = {
+        "invoice": bolt12,
+    }
+
+    if invoice.description:
+        res["description"] = invoice.description
+    if invoice.description_hash:
+        res["description_hash"] = invoice.description_hash
+    if invoice.payer_note:
+        res["payer_note"] = invoice.payer_note
+    res["payment_hash"] = invoice.payment_hash
+    if invoice.amount_msat:
+        res["amount"] = invoice.amount_msat
+    if invoice.offer_id:
+        res["offer_id"] = invoice.offer_id
+    res["created_at"] = int(invoice.invoice_created_at)
+    if invoice.invoice_relative_expiry:
+        res["expires_at"] = int(invoice.invoice_created_at) + int(invoice.invoice_relative_expiry)
+    return [(res, None, [])]
 
 
 async def _on_make_invoice(
@@ -317,23 +626,34 @@ async def _on_lookup_invoice(
     # Ensure payment_hash or invoice are provided
     if not payment_hash and not invoice:
         raise Exception("Missing payment_hash or invoice")
+    funding_source = get_funding_source()
+
+    # hardening #
+    assert_valid_bolt12(invoice)
+    # ## #
+
     # Extract hash from invoice if not provided
     if not payment_hash:
-        invoice_data = bolt11_decode(invoice)
+        invoice_data = await funding_source.decode_invoice(invoice)
+
+        if not invoice_data:
+            raise Exception("Invalid invoice " + invoice)
         payment_hash = invoice_data.payment_hash
 
     # hardening #
     assert_valid_sha256(payment_hash)
-    assert_valid_bolt11(invoice)
     # ## #
 
     # Get payment data
     payment = await get_wallet_payment(nwc.wallet, payment_hash)
     if not payment:
         raise Exception("Payment not found")
-    invoice_data = bolt11_decode(payment.bolt11)
+    invoice_data = await funding_source.decode_invoice(invoice)
+
+    if not invoice_data:
+        raise Exception("Invalid invoice " + invoice)
     is_settled = not payment.pending
-    timestamp = int(payment.time.timestamp()) or int(invoice_data.date)
+    timestamp = int(payment.time.timestamp()) or int(invoice_data.invoice_created_at)
     expiry = int(payment.expiry.timestamp()) or timestamp + 3600
     preimage = (
         payment.preimage
@@ -504,6 +824,12 @@ async def handle_nwc():
     nwcsp = NWCServiceProvider(priv_key, relay, handle_missed_events)
     nwcsp.add_request_listener("pay_invoice", _on_pay_invoice)
     nwcsp.add_request_listener("multi_pay_invoice", _on_multi_pay_invoice)
+    nwcsp.add_request_listener("make_offer", _on_make_offer)
+    nwcsp.add_request_listener("lookup_offer", _on_lookup_offer)
+    nwcsp.add_request_listener("enable_offer", _on_enable_offer)
+    nwcsp.add_request_listener("disable_offer", _on_disable_offer)
+    nwcsp.add_request_listener("list_offers", _on_list_offers)
+    nwcsp.add_request_listener("fetch_invoice", _on_fetch_invoice)
     nwcsp.add_request_listener("make_invoice", _on_make_invoice)
     nwcsp.add_request_listener("lookup_invoice", _on_lookup_invoice)
     nwcsp.add_request_listener("list_transactions", _on_list_transactions)

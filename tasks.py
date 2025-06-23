@@ -323,8 +323,10 @@ async def _on_lookup_invoice(
         payment_hash = invoice_data.payment_hash
 
     # hardening #
-    assert_valid_sha256(payment_hash)
-    assert_valid_bolt11(invoice)
+    if payment_hash:
+        assert_valid_sha256(payment_hash)
+    if invoice:
+        assert_valid_bolt11(invoice)
     # ## #
 
     # Get payment data

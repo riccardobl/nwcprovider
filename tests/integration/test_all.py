@@ -183,7 +183,11 @@ class NWCWallet:
 
     async def _wait_for_connection(self):
         while not self.connected:
-            await asyncio.sleep(0.2)
+            try:
+                await asyncio.sleep(0.2)
+            except asyncio.CancelledError:
+                logger.debug("Connection wait cancelled")
+                return
 
     async def start(self):
         self.task = asyncio.create_task(self._run())
@@ -335,7 +339,7 @@ class NWCWallet:
         await self.ws.send(self._json_dumps(["EVENT", event]))
 
     async def wait_for(
-        self, result_type, callback=None, on_error_callback=None, timeout=60
+        self, result_type, callback=None, on_error_callback=None, timeout=60000
     ):
         now = time.time()
         while True:
@@ -627,6 +631,7 @@ async def test_multi_pay_invoices():
     assert not error
     assert result["invoice"]
     invoice3 = result["invoice"]
+    invoice3_payhash = result["payment_hash"]
 
     await wallet3.send_event(
         "multi_pay_invoice",
@@ -645,7 +650,7 @@ async def test_multi_pay_invoices():
         assert result["preimage"]
     elif d_tag == "invoice2":
         assert result["preimage"]
-    elif d_tag == invoice3:
+    elif d_tag == invoice3_payhash:
         assert result["preimage"]
     else:
         raise AssertionError("Unexpected d tag")
@@ -991,3 +996,65 @@ async def create_valid_invoice(wallet, amount=1000):
     if error:
         raise Exception(f"Failed to create invoice: {error}")
     return result["invoice"]
+
+@pytest.mark.asyncio
+async def test_list_transactions():
+    # Create wallets with required permissions
+    nwc1 = await create_nwc(
+        "wallet1", "test_list_transactions", ["invoice", "pay", "balance", "history"], [], 0
+    )
+    nwc2 = await create_nwc(
+        "wallet2", "test_list_transactions", ["invoice", "pay", "balance", "history"], [], 0
+    )
+    
+    wallet1 = NWCWallet(nwc1["pairing"])
+    wallet2 = NWCWallet(nwc2["pairing"])
+    
+    try:
+        await wallet1.start()
+        await wallet2.start()
+        
+        # First invoice
+        await wallet1.send_event(
+            "make_invoice", {"amount": 1000, "description": "test invoice 1"}
+        )
+        result1, _, error = await wallet1.wait_for("make_invoice")
+        assert not error
+        invoice1 = result1["invoice"]
+        
+        # Pay first invoice
+        await wallet2.send_event("pay_invoice", {"invoice": invoice1})
+        _, _, error = await wallet2.wait_for("pay_invoice")
+        assert not error
+        
+        # Second invoice
+        await wallet1.send_event(
+            "make_invoice", {"amount": 2000, "description": "test invoice 2"}
+        )
+        result2, _, error = await wallet1.wait_for("make_invoice")
+        assert not error
+        invoice2 = result2["invoice"]
+        
+        # Pay second invoice
+        await wallet2.send_event("pay_invoice", {"invoice": invoice2})
+        _, _, error = await wallet2.wait_for("pay_invoice")
+        assert not error
+        
+        # Test basic transaction listing
+        await wallet1.send_event("list_transactions", {})
+        result, _, error = await wallet1.wait_for("list_transactions")
+        assert not error
+        assert "transactions" in result
+        transactions = result["transactions"]
+        assert len(transactions) >= 2
+        
+        # Test limit
+        await wallet1.send_event("list_transactions", {"limit": 1})
+        result, _, error = await wallet1.wait_for("list_transactions")
+        assert not error
+        limited_txs = result["transactions"]
+        assert len(limited_txs) == 1
+        
+    finally:
+        await wallet1.close()
+        await wallet2.close()

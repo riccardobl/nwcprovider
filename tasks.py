@@ -375,16 +375,17 @@ async def _on_list_transactions(
         return [(None, error, [])]
     if not nwc:
         raise Exception("Pubkey has no associated wallet")
-    tfrom = payload.get("from", 0)
-    tto = payload.get("to", int(time.time()))
-    limit = payload.get("limit", 10)
-    offset = payload.get("offset", 0)
-    unpaid = payload.get("unpaid", False)
-    tx_type = payload.get("type", "")
+    params = payload.get("params", 0)
+    tfrom = params.get("from", 0)
+    tuntil = params.get("until", int(time.time()))
+    limit = params.get("limit", 10)
+    offset = params.get("offset", 0)
+    unpaid = params.get("unpaid", False)
+    tx_type = params.get("type", "")
 
     # hardening #
     assert_valid_positive_int(tfrom)
-    assert_valid_positive_int(tto)
+    assert_valid_positive_int(tuntil)
     assert_valid_positive_int(limit)
     assert_valid_positive_int(offset)
     assert_boolean(unpaid)
@@ -394,7 +395,7 @@ async def _on_list_transactions(
     values = []
     filters: Filters = Filters()
     filters.where(["time <= ?"])
-    values.append(tto)
+    values.append(tuntil)
     filters.values(values)
     history = await get_payments(
         wallet_id=nwc.wallet,

@@ -997,23 +997,32 @@ async def create_valid_invoice(wallet, amount=1000):
         raise Exception(f"Failed to create invoice: {error}")
     return result["invoice"]
 
+
 @pytest.mark.asyncio
 async def test_list_transactions():
     # Create wallets with required permissions
     nwc1 = await create_nwc(
-        "wallet1", "test_list_transactions", ["invoice", "pay", "balance", "history"], [], 0
+        "wallet1",
+        "test_list_transactions",
+        ["invoice", "pay", "balance", "history"],
+        [],
+        0,
     )
     nwc2 = await create_nwc(
-        "wallet2", "test_list_transactions", ["invoice", "pay", "balance", "history"], [], 0
+        "wallet2",
+        "test_list_transactions",
+        ["invoice", "pay", "balance", "history"],
+        [],
+        0,
     )
-    
+
     wallet1 = NWCWallet(nwc1["pairing"])
     wallet2 = NWCWallet(nwc2["pairing"])
-    
+
     try:
         await wallet1.start()
         await wallet2.start()
-        
+
         # First invoice
         await wallet1.send_event(
             "make_invoice", {"amount": 1000, "description": "test invoice 1"}
@@ -1021,12 +1030,12 @@ async def test_list_transactions():
         result1, _, error = await wallet1.wait_for("make_invoice")
         assert not error
         invoice1 = result1["invoice"]
-        
+
         # Pay first invoice
         await wallet2.send_event("pay_invoice", {"invoice": invoice1})
         _, _, error = await wallet2.wait_for("pay_invoice")
         assert not error
-        
+
         # Second invoice
         await wallet1.send_event(
             "make_invoice", {"amount": 2000, "description": "test invoice 2"}
@@ -1034,12 +1043,12 @@ async def test_list_transactions():
         result2, _, error = await wallet1.wait_for("make_invoice")
         assert not error
         invoice2 = result2["invoice"]
-        
+
         # Pay second invoice
         await wallet2.send_event("pay_invoice", {"invoice": invoice2})
         _, _, error = await wallet2.wait_for("pay_invoice")
         assert not error
-        
+
         # Test basic transaction listing
         await wallet1.send_event("list_transactions", {})
         result, _, error = await wallet1.wait_for("list_transactions")
@@ -1047,14 +1056,14 @@ async def test_list_transactions():
         assert "transactions" in result
         transactions = result["transactions"]
         assert len(transactions) >= 2
-        
+
         # Test limit
         await wallet1.send_event("list_transactions", {"limit": 1})
         result, _, error = await wallet1.wait_for("list_transactions")
         assert not error
         limited_txs = result["transactions"]
         assert len(limited_txs) == 1
-        
+
     finally:
         await wallet1.close()
         await wallet2.close()

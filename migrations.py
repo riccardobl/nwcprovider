@@ -87,12 +87,13 @@ async def m004_default_config2(db):
     Default config
     """
     await db.execute(
-       """
+        """
         INSERT INTO nwcprovider.config (key, value) VALUES ('relay_alias', :value)
         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
         """,
-       {"value": ""},
-   )
+        {"value": ""},
+    )
+
 
 async def m005_key_last_used(db):
     """

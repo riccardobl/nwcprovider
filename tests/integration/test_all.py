@@ -396,6 +396,7 @@ async def test_make_invoice():
     result, tags, error = await wallet1.wait_for("make_invoice")
     assert not error
     assert result["type"] == "incoming"
+    assert result["state"] == "pending"
     assert result["description"] == "test 123"
     assert result["amount"] == 123000
     assert result["preimage"]
@@ -427,6 +428,7 @@ async def test_lookup_invoice():
     result, tags, error = await wallet1.wait_for("make_invoice")
     assert not error
     assert result["type"] == "incoming"
+    assert result["state"] == "pending"
     assert result["description"] == "test 123"
     assert result["amount"] == 123000
     assert result["preimage"]
@@ -443,6 +445,7 @@ async def test_lookup_invoice():
     result, tags, error = await wallet2.wait_for("lookup_invoice")
     assert not error
     assert result["type"] == "incoming"
+    assert result["state"] == "pending"  # Invoice should be pending since it hasn't been paid
     assert result["description"] == "test 123"
     assert result["amount"] == 123000
     assert result["preimage"]
@@ -1047,6 +1050,11 @@ async def test_list_transactions():
         assert "transactions" in result
         transactions = result["transactions"]
         assert len(transactions) >= 2
+        
+        # Check that transactions include the state field
+        for tx in transactions:
+            assert "state" in tx, "Each transaction should include a state field"
+            assert tx["state"] in ["pending", "settled", "expired", "failed"], f"Invalid state: {tx['state']}"
         
         # Test limit
         await wallet1.send_event("list_transactions", {"limit": 1})

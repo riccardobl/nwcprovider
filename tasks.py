@@ -281,6 +281,7 @@ async def _on_make_invoice(
         preimage = "0000000000000000000000000000000000000000000000000000000000000000"
     res = {
         "type": "incoming",
+        "state": "pending",
         "invoice": payment_request,
         "description": description,
         "description_hash": description_hash,
@@ -339,8 +340,23 @@ async def _on_lookup_invoice(
         payment.preimage
         or "0000000000000000000000000000000000000000000000000000000000000000"
     )
+    
+    # Determine state based on payment status
+    if is_settled:
+        state = "settled"
+    elif payment.is_out and payment.pending:
+        # For outgoing payments, if pending it could be failed
+        # We would need to check the actual payment status to determine if failed
+        state = "pending"  # Default to pending for now
+    elif not payment.is_out and expiry < int(time.time()):
+        # For incoming invoices, check if expired
+        state = "expired"
+    else:
+        state = "pending"
+    
     res: Dict = {
         "type": "outgoing" if payment.is_out else "incoming",
+        "state": state,
         "invoice": payment.bolt11,
         "description": (
             invoice_data.description if invoice_data.description else payment.memo
@@ -413,9 +429,28 @@ async def _on_list_transactions(
         invoice_data = bolt11_decode(p.bolt11)
         is_settled = not p.pending
         timestamp = int(p.time.timestamp()) or invoice_data.date
+        
+        # Determine state based on payment status
+        if is_settled:
+            state = "settled"
+        elif p.is_out and p.pending:
+            # For outgoing payments, if pending it could be failed
+            # We would need to check the actual payment status to determine if failed
+            state = "pending"  # Default to pending for now
+        elif not p.is_out:
+            # For incoming invoices, check if expired
+            expiry = int(p.expiry.timestamp()) if p.expiry else timestamp + 3600
+            if expiry < int(time.time()):
+                state = "expired"
+            else:
+                state = "pending"
+        else:
+            state = "pending"
+            
         transactions.append(
             {
                 "type": "outgoing" if p.is_out else "incoming",
+                "state": state,
                 "invoice": p.bolt11,
                 "description": invoice_data.description,
                 "description_hash": invoice_data.description_hash,

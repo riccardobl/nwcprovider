@@ -3,6 +3,11 @@ echo $PYTHONPATH
 CONTAINER_WORKSPACE_FOLDER=$1
 cd $CONTAINER_WORKSPACE_FOLDER
 
+# workaround for devimage
+sudo find /etc/apt/sources.list.d -maxdepth 1 -type f -exec \
+    sh -c 'grep -q "dl.yarnpkg.com/debian" "$1" && rm -f "$1" || true' _ {} \;
+sudo sed -i '/dl.yarnpkg.com\/debian/d' /etc/apt/sources.list || true
+
 cd $HOME
 echo $PWD
 if [ ! -d ./lnbits ] ; then
@@ -25,3 +30,4 @@ cd $CONTAINER_WORKSPACE_FOLDER
 poetry install --no-interaction
 npm i prettier
 npm i pyright
+pip install uv

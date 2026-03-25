@@ -352,11 +352,13 @@ class NWCServiceProvider:
                 content["result"] = out["result"]
             if "error" in out:
                 content["error"] = out["error"]
+            raw_tags = out.get("tags")
+            tags = list(raw_tags) if isinstance(raw_tags, list) else []
             # Prepare response event
             res: dict = {
                 "kind": 23195,
                 "created_at": int(time.time()),
-                "tags": list(out.get("tags", [])),
+                "tags": tags,
                 "content": self._json_dumps(content),
             }
             # Reference request

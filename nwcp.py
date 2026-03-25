@@ -356,7 +356,7 @@ class NWCServiceProvider:
             res: dict = {
                 "kind": 23195,
                 "created_at": int(time.time()),
-                "tags": out.get("tags", []),
+                "tags": list(out.get("tags", [])),
                 "content": self._json_dumps(content),
             }
             # Reference request

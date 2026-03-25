@@ -53,7 +53,7 @@ class MainSubscription:
         expire = expire or 1 * 60 * 60
         now = int(time.time())
         deleted_ids = []
-        for [event_id, event] in self.events.items():
+        for event_id, event in list(self.events.items()):
             if event_id in self.responses:
                 if now - event["created_at"] > expire:
                     del self.events[event_id]

@@ -338,7 +338,7 @@ class NWCServiceProvider:
                 for result in results:
                     r = result[0]
                     e = result[1]
-                    t = result[2] if len(result) > 2 else None
+                    t = result[2] if len(result) > 2 else []
                     out = {"result": r, "error": e, "tags": t}
                     outs.append(out)
             except Exception as e:

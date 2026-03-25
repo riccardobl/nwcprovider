@@ -378,6 +378,17 @@ class NWCServiceProvider:
             sent_events.append(res)
         return sent_events
 
+    def _extract_expiration_from_tags(self, tags: list) -> int:
+        expiration = -1
+        for tag in tags:
+            try:
+                if tag[0] == "expiration" and len(tag) > 1:
+                    expiration = int(tag[1])
+                    break
+            except Exception:
+                pass
+        return expiration
+
     async def _on_event_message(self, msg):
         if not self.sub:
             return
@@ -387,11 +398,7 @@ class NWCServiceProvider:
         if not self._verify_event(event):
             raise Exception("Invalid event signature")
         tags = event["tags"]
-        expiration = -1
-        for tag in tags:
-            if tag[0] == "expiration" and len(tag) > 1:
-                expiration = int(tag[1])   
-                break             
+        expiration = self._extract_expiration_from_tags(tags)
         # Handle event expiration if the relay doesn't support nip 40
         if expiration > 0 and expiration < int(time.time()):
             logger.debug("Event expired")

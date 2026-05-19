@@ -872,9 +872,7 @@ async def test_never_refresh_budget_counts_previous_spend():
             )
             assert resp.status_code == 200
             payer_nwc = next(
-                item
-                for item in resp.json()
-                if item["data"]["pubkey"] == nwc3["pubkey"]
+                item for item in resp.json() if item["data"]["pubkey"] == nwc3["pubkey"]
             )
             assert payer_nwc["budgets"][0]["used_budget_msats"] == 60000
 

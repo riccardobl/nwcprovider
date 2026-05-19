@@ -39,7 +39,7 @@ class NWCBudget(BaseModel):
         c = int(time.time())
         if self.refresh_window <= 0:  # never refresh
             # return a timestamp in the future
-            return c, c + 21000000
+            return self.created_at, c + 21000000
         # calculate the next refresh timestamp
         elapsed = c - self.created_at
         passed_cycles = elapsed // self.refresh_window

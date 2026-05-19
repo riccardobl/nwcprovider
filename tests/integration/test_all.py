@@ -822,6 +822,79 @@ async def test_budget_refresh():
     await wallet1.close()
 
 
+@pytest.mark.asyncio
+async def test_never_refresh_budget_counts_previous_spend():
+    await check_services()
+    nwc1 = await create_nwc(
+        "wallet1",
+        "test_never_refresh_budget_counts_previous_spend",
+        ["invoice"],
+        [],
+        0,
+    )
+    nwc3 = await create_nwc(
+        "wallet3",
+        "test_never_refresh_budget_counts_previous_spend",
+        ["pay"],
+        [
+            {
+                "budget_msats": 100000,
+                "refresh_window": 0,
+                "created_at": int(time.time()),
+            }
+        ],
+        0,
+    )
+    wallet1 = NWCWallet(nwc1["pairing"])
+    wallet3 = NWCWallet(nwc3["pairing"])
+
+    try:
+        await wallet1.start()
+        await wallet3.start()
+
+        await wallet1.send_event(
+            "make_invoice", {"amount": 60000, "description": "Within lifetime budget"}
+        )
+        result, _, error = await wallet1.wait_for("make_invoice")
+        assert not error
+
+        await wallet3.send_event("pay_invoice", {"invoice": result["invoice"]})
+        _, _, error = await wallet3.wait_for("pay_invoice")
+        assert not error
+
+        await asyncio.sleep(2)
+
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                "http://localhost:5002/nwcprovider/api/v1/nwc"
+                "?calculate_spent_budget=true",
+                headers={"X-Api-Key": wallets["wallet3"]["admin_key"]},
+            )
+            assert resp.status_code == 200
+            payer_nwc = next(
+                item
+                for item in resp.json()
+                if item["data"]["pubkey"] == nwc3["pubkey"]
+            )
+            assert payer_nwc["budgets"][0]["used_budget_msats"] == 60000
+
+        await wallet1.send_event(
+            "make_invoice", {"amount": 50000, "description": "Exceeds lifetime budget"}
+        )
+        result, _, error = await wallet1.wait_for("make_invoice")
+        assert not error
+
+        await wallet3.send_event("pay_invoice", {"invoice": result["invoice"]})
+        _, _, error = await wallet3.wait_for("pay_invoice")
+        assert error
+        assert error["code"] == "QUOTA_EXCEEDED"
+    finally:
+        if wallet3.ws:
+            await wallet3.close()
+        if wallet1.ws:
+            await wallet1.close()
+
+
 # Mostly AI generated pentests
 
 

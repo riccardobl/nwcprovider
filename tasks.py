@@ -114,6 +114,14 @@ async def _process_invoice(
         payment_status = await check_transaction_status(wallet_id, payment_hash)
         if payment_status.success:
             break
+        if payment_status.failed:
+            return {
+                "error": {
+                    "code": "PAYMENT_FAILED",
+                    "message": "Payment failed.",
+                },
+                "in_budget": in_budget,
+            }
         await asyncio.sleep(0.05)
     if not payment_status:
         raise Exception("Payment status not found")

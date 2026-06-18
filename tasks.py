@@ -231,6 +231,7 @@ async def _on_multi_pay_invoice(
                 results.append(r)
         except Exception as e:
             results.append((None, {"code": "INTERNAL", "message": str(e)}, []))
+        await asyncio.sleep(0)
     # await log_nwc(pubkey, payload)
     return results
 
@@ -440,6 +441,7 @@ async def _on_list_transactions(
                 "metadata": {},
             }
         )
+        await asyncio.sleep(0)
     # await log_nwc(pubkey, payload)
     return [({"transactions": transactions}, None, [])]
 

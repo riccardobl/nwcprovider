@@ -2,6 +2,7 @@ import asyncio
 import json
 import random
 import string
+import time
 
 import pytest
 from loguru import logger
@@ -75,6 +76,18 @@ def test_signverify(nwc_service_provider, nwc_service_provider2):
     assert nwc_service_provider2._verify_event(signed)
 
 
+def test_default_event_max_age(nwc_service_provider):
+    assert nwc_service_provider.event_max_age == 5 * 60
+    assert (
+        NWCServiceProvider(
+            "d7b5232fba0e02e32cfe26f20cdf2c803b27ecd81052c2dd5d17e5e1a333fe58",
+            "",
+            handle_missed_events=123,
+        ).event_max_age
+        == 123
+    )
+
+
 @pytest.mark.asyncio
 async def test_handle(nwc_service_provider, nwc_service_provider2):
     content = nwc_service_provider._json_dumps(
@@ -87,7 +100,7 @@ async def test_handle(nwc_service_provider, nwc_service_provider2):
         "kind": 23194,
         "content": content,
         "tags": [["p", nwc_service_provider2.public_key_hex]],
-        "created_at": 1234567890,
+        "created_at": int(time.time()),
     }
     signed = nwc_service_provider._sign_event(event)
 
@@ -101,6 +114,7 @@ async def test_handle(nwc_service_provider, nwc_service_provider2):
         pass
 
     nwc_service_provider2._send = _send_pass
+    nwc_service_provider2._create_subscription()
     nwc_service_provider2.add_request_listener("pay_invoice", _handle_pay_invoice)
     sent_events = await nwc_service_provider2._handle_request(signed)
     assert len(sent_events) == 1
@@ -126,6 +140,45 @@ async def test_handle(nwc_service_provider, nwc_service_provider2):
         p_tag = [tag for tag in tags if tag[0] == "p"]
         assert len(p_tag) == 1
         assert p_tag[0][1] == nwc_service_provider.public_key_hex
+
+
+@pytest.mark.asyncio
+async def test_handle_rejects_same_event_replay(
+    nwc_service_provider, nwc_service_provider2
+):
+    content = nwc_service_provider._json_dumps(
+        {"method": "pay_invoice", "params": {"invoice": "abc"}}
+    )
+    content = nwc_service_provider.private_key.encrypt_message(
+        content, nwc_service_provider2.public_key_hex
+    )
+    event = {
+        "kind": 23194,
+        "content": content,
+        "tags": [["p", nwc_service_provider2.public_key_hex]],
+        "created_at": int(time.time()),
+    }
+    signed = nwc_service_provider._sign_event(event)
+    calls = 0
+
+    async def _handle_pay_invoice(provider, pubkey, content):
+        nonlocal calls
+        calls += 1
+        return [({"preimage": "00000"}, None, [])]
+
+    async def _send_pass(obj):
+        pass
+
+    nwc_service_provider2._send = _send_pass
+    nwc_service_provider2._create_subscription()
+    nwc_service_provider2.add_request_listener("pay_invoice", _handle_pay_invoice)
+
+    await nwc_service_provider2._handle_request(signed)
+
+    with pytest.raises(Exception, match="already handled"):
+        await nwc_service_provider2._handle_request(signed)
+
+    assert calls == 1
 
 
 @pytest.mark.asyncio

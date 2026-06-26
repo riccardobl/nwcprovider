@@ -27,6 +27,7 @@ class MainSubscription:
         self.responses_eose = False
         self.events: dict[str, dict] = {}
         self.responses: list[str] = []
+        self.seen_requests: dict[str, int] = {}
 
     def get_stale(self) -> list[dict]:
         """
@@ -49,6 +50,7 @@ class MainSubscription:
         """
         Garbage collection, remove all the events that have a response older
         than expire seconds (defaults to 1 hour if 0 or None)
+        and all seen requests that are expired
         """
         expire = expire or 1 * 60 * 60
         now = int(time.time())
@@ -64,6 +66,11 @@ class MainSubscription:
 
         if len(deleted_ids) > 0:
             logger.debug("Garbage collected " + str(len(deleted_ids)) + " events")
+
+        # Clean seen requests
+        for event_id, expiry in list(self.seen_requests.items()):
+            if expiry < now:
+                del self.seen_requests[event_id]
 
     class Config:
         arbitrary_types_allowed = True
@@ -125,7 +132,7 @@ class NWCServiceProvider:
         self.info_event_task = None
 
         # Subscription
-        self.sub = None
+        self.sub: MainSubscription | None = None
         self.rate_limit: dict[str, RateLimit] = {}
 
         # websocket connection
@@ -141,6 +148,8 @@ class NWCServiceProvider:
         # handle_missed_events seconds (0 to disable)
         #   (handles reboots)
         self.handle_missed_events = handle_missed_events
+
+        self.event_max_age = self.handle_missed_events or 5 * 60
 
         logger.info(
             "NWC Service is ready. relay: "
@@ -270,11 +279,16 @@ class NWCServiceProvider:
         await asyncio.sleep(limit.backoff)
         limit.last_attempt_time = int(time.time())
 
+    def _create_subscription(self) -> MainSubscription:
+        sub = MainSubscription()
+        self.sub = sub
+        return sub
+
     async def _subscribe(self):
         """
         [Re]Subscribe to receive nip 47 requests and responses from the relay
         """
-        self.sub = MainSubscription()
+        sub = self._create_subscription()
         # Create requests subscription
         req_filter = {
             "kinds": [23194],
@@ -282,17 +296,17 @@ class NWCServiceProvider:
             # Since the last handle_missed_events seconds (handles reboots)
             "since": int(time.time()) - self.handle_missed_events,
         }
-        self.sub.requests_sub_id = self._get_new_subid()
+        sub.requests_sub_id = self._get_new_subid()
         # Create responses subscription (needed to track previosly responded requests)
         res_filter = {
             "kinds": [23195],
             "authors": [self.public_key_hex],
             "since": int(time.time()) - self.handle_missed_events,
         }
-        self.sub.responses_sub_id = self._get_new_subid()
+        sub.responses_sub_id = self._get_new_subid()
         # Subscribe
-        await self._send(["REQ", self.sub.requests_sub_id, req_filter])
-        await self._send(["REQ", self.sub.responses_sub_id, res_filter])
+        await self._send(["REQ", sub.requests_sub_id, req_filter])
+        await self._send(["REQ", sub.responses_sub_id, res_filter])
 
     async def _on_connection(self, _):
         """
@@ -335,6 +349,19 @@ class NWCServiceProvider:
         """
         Handle a nwc request
         """
+        if not self.sub:
+            raise Exception("Subscription is not established")
+        sub = self.sub
+
+        expire = sub.seen_requests.get(event["id"])
+        if expire or event["created_at"] < int(time.time() - self.event_max_age):
+            raise Exception("Event is too old or already handled")
+
+        expiration = self._extract_expiration_from_tags(event["tags"])
+        if expiration <= 0:
+            expiration = int(time.time() + self.event_max_age)
+        sub.seen_requests[event["id"]] = expiration
+
         nwc_pubkey = event["pubkey"]
         content = event["content"]
         # Decrypt the content

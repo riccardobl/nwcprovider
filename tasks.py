@@ -34,6 +34,8 @@ from .paranoia import (
 )
 from .permission import nwc_permissions
 
+PAYMENT_STATUS_POLL_INTERVAL_SECONDS = 1.0
+
 
 async def _check(nwc: NWCKey | None, method: str) -> dict | None:
     # check
@@ -122,7 +124,7 @@ async def _process_invoice(
                 },
                 "in_budget": in_budget,
             }
-        await asyncio.sleep(0.05)
+        await asyncio.sleep(PAYMENT_STATUS_POLL_INTERVAL_SECONDS)
     if not payment_status:
         raise Exception("Payment status not found")
     return {

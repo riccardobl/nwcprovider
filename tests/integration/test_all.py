@@ -12,6 +12,10 @@ from loguru import logger
 from pynostr.key import PrivateKey
 from websockets.legacy.client import connect
 
+SERVICE_STARTUP_TIMEOUT_SECONDS = 180
+NWC_CONNECTION_TIMEOUT_SECONDS = 60
+NWC_RESPONSE_TIMEOUT_SECONDS = 60
+
 wallets = {
     "wallet1": {
         "name": "wallet1",
@@ -41,35 +45,29 @@ wallets = {
 
 
 async def check_services():
-    # wait for http server in localhost:7777
-    while True:
+    async def wait_for_service(name: str, url: str):
+        deadline = time.monotonic() + SERVICE_STARTUP_TIMEOUT_SECONDS
         try:
             async with httpx.AsyncClient() as client:
-                resp = await client.get("http://localhost:7777")
-                assert resp.status_code == 200
-                break
-        except Exception:
-            logger.info("Waiting for nostr relay @ http://localhost:7777")
-            logger.info(
-                """Please start the required services by running\
- `bash start.sh` if you haven't already"""
-            )
-            await asyncio.sleep(1)
+                while True:
+                    try:
+                        resp = await client.get(url)
+                        if resp.status_code == 200:
+                            return
+                    except httpx.HTTPError:
+                        pass
+                    if time.monotonic() >= deadline:
+                        raise RuntimeError(
+                            f"Timed out waiting for {name} at {url}. "
+                            "Start the integration services with `bash start.sh`."
+                        )
+                    logger.info(f"Waiting for {name} @ {url}")
+                    await asyncio.sleep(1)
+        except httpx.HTTPError as exc:
+            raise RuntimeError(f"Unable to check {name} at {url}: {exc}") from exc
 
-    # wait lnbits @ localhost:5000
-    while True:
-        try:
-            async with httpx.AsyncClient() as client:
-                resp = await client.get("http://localhost:5002")
-                assert resp.status_code == 200
-                break
-        except Exception:
-            logger.info("Waiting for lnbits @ http://localhost:5002")
-            logger.info(
-                """Please start the required services by running\
- `bash start.sh` if you haven't already"""
-            )
-            await asyncio.sleep(1)
+    await wait_for_service("nostr relay", "http://localhost:7777")
+    await wait_for_service("LNbits", "http://localhost:5002")
 
 
 async def get_wallet_balance(w: str):
@@ -179,15 +177,21 @@ class NWCWallet:
 
     async def _wait_for_connection(self):
         while not self.connected:
-            try:
-                await asyncio.sleep(0.2)
-            except asyncio.CancelledError:
-                logger.debug("Connection wait cancelled")
-                return
+            await asyncio.sleep(0.2)
 
     async def start(self):
         self.task = asyncio.create_task(self._run())
-        await self._wait_for_connection()
+        try:
+            await asyncio.wait_for(
+                self._wait_for_connection(), timeout=NWC_CONNECTION_TIMEOUT_SECONDS
+            )
+        except asyncio.TimeoutError as exc:
+            self.task.cancel()
+            await asyncio.gather(self.task, return_exceptions=True)
+            self.task = None
+            raise RuntimeError(
+                f"Timed out connecting to NWC relay {self.relay}"
+            ) from exc
 
     def _is_shutting_down(self):
         return self.shutdown
@@ -304,7 +308,11 @@ class NWCWallet:
         await self.ws.send(self._json_dumps(["EVENT", event]))
 
     async def wait_for(
-        self, result_type, callback=None, on_error_callback=None, timeout=60000
+        self,
+        result_type,
+        callback=None,
+        on_error_callback=None,
+        timeout=NWC_RESPONSE_TIMEOUT_SECONDS,
     ):
         now = time.time()
         while True:

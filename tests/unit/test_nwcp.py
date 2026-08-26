@@ -182,6 +182,72 @@ async def test_handle_rejects_same_event_replay(
 
 
 @pytest.mark.asyncio
+async def test_relay_dispatches_requests_without_waiting_for_previous_request(
+    nwc_service_provider, monkeypatch
+):
+    sub = nwc_service_provider._create_subscription()
+    sub.requests_sub_id = "requests"
+    sub.requests_eose = True
+    sub.responses_eose = True
+    monkeypatch.setattr(nwc_service_provider, "_verify_event", lambda event: True)
+
+    first_request_finished = asyncio.Event()
+    second_request_finished = asyncio.Event()
+
+    async def _handle_request(event):
+        if event["id"] == "first":
+            await first_request_finished.wait()
+        else:
+            second_request_finished.set()
+        return []
+
+    monkeypatch.setattr(nwc_service_provider, "_handle_request", _handle_request)
+
+    def request(event_id):
+        return json.dumps(
+            [
+                "EVENT",
+                sub.requests_sub_id,
+                {
+                    "id": event_id,
+                    "kind": 23194,
+                    "pubkey": "a" * 64,
+                    "content": "",
+                    "tags": [["p", nwc_service_provider.public_key_hex]],
+                    "created_at": int(time.time()),
+                },
+            ]
+        )
+
+    await nwc_service_provider._on_message(None, request("first"))
+    await nwc_service_provider._on_message(None, request("second"))
+
+    await asyncio.wait_for(second_request_finished.wait(), timeout=1)
+    assert not first_request_finished.is_set()
+
+    first_request_finished.set()
+    await asyncio.gather(*list(nwc_service_provider.request_tasks))
+
+
+@pytest.mark.asyncio
+async def test_cleanup_cancels_pending_request_tasks(nwc_service_provider, monkeypatch):
+    request_started = asyncio.Event()
+
+    async def _handle_request(event):
+        request_started.set()
+        await asyncio.Event().wait()
+        return []
+
+    monkeypatch.setattr(nwc_service_provider, "_handle_request", _handle_request)
+    nwc_service_provider._dispatch_request({"id": "pending"})
+    await request_started.wait()
+
+    await nwc_service_provider.cleanup()
+
+    assert not nwc_service_provider.request_tasks
+
+
+@pytest.mark.asyncio
 async def test_send_info_event(nwc_service_provider):
     """_send_info_event should publish a signed kind-13194 event."""
     nwc_service_provider.add_request_listener(

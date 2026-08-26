@@ -131,6 +131,9 @@ class NWCServiceProvider:
         # Periodic info event resend loop
         self.info_event_task = None
 
+        # Requests are handled independently from the relay receive loop.
+        self.request_tasks: set[asyncio.Task[list[dict]]] = set()
+
         # Subscription
         self.sub: MainSubscription | None = None
         self.rate_limit: dict[str, RateLimit] = {}
@@ -431,6 +434,19 @@ class NWCServiceProvider:
             sent_events.append(res)
         return sent_events
 
+    def _log_request_task_exception(self, task: asyncio.Future[list[dict]]) -> None:
+        if task.cancelled():
+            return
+        exception = task.exception()
+        if exception:
+            logger.error("Error handling request: " + str(exception))
+
+    def _dispatch_request(self, event: dict) -> None:
+        task = asyncio.create_task(self._handle_request(event))
+        self.request_tasks.add(task)
+        task.add_done_callback(self.request_tasks.discard)
+        task.add_done_callback(self._log_request_task_exception)
+
     def _extract_expiration_from_tags(self, tags: list) -> int:
         expiration = -1
         for tag in tags:
@@ -470,7 +486,7 @@ class NWCServiceProvider:
             # already handled or stale, all stale requests will be handled
             # later when eose is received
             if self.sub.requests_eose and self.sub.responses_eose:
-                await self._handle_request(event)
+                self._dispatch_request(event)
         elif event["kind"] == 23195 and sub_id == self.sub.responses_sub_id:
             # Ensure the response is from this service provider
             if event["pubkey"] != self.public_key_hex:
@@ -498,7 +514,7 @@ class NWCServiceProvider:
         if self.sub.requests_eose and self.sub.responses_eose:
             stales = self.sub.get_stale()
             for stale in stales:
-                await self._handle_request(stale)
+                self._dispatch_request(stale)
 
     async def _on_closed_message(self, msg):
         if not self.sub:
@@ -656,6 +672,12 @@ class NWCServiceProvider:
                 self.info_event_task.cancel()
         except Exception as e:
             logger.warning("Error closing info event loop: " + str(e))
+        request_tasks = list(self.request_tasks)
+        for task in request_tasks:
+            task.cancel()
+        if request_tasks:
+            await asyncio.gather(*request_tasks, return_exceptions=True)
+        self.request_tasks.clear()
         # close the websocket
         try:
             if self.ws:

@@ -32,29 +32,30 @@ async def test_process_invoice_returns_payment_failed_on_failed_status(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_process_invoice_polls_pending_payment_at_sustainable_interval(
+async def test_process_invoice_backs_off_pending_payment_polling_to_configured_max(
     monkeypatch,
 ):
     async def fake_tracked_spend_nwc(*args, **kwargs):
         return True, "a" * 64
 
+    pending = SimpleNamespace(success=False, failed=False)
     statuses = iter(
-        [
-            SimpleNamespace(success=False, failed=False),
+        [pending] * 8
+        + [
             SimpleNamespace(
                 success=True,
                 failed=False,
                 preimage="b" * 64,
                 fee_msat=10,
                 paid=True,
-            ),
+            )
         ]
     )
 
     async def fake_check_transaction_status(wallet_id: str, payment_hash: str):
         return next(statuses)
 
-    sleep_calls = []
+    sleep_calls: list[float] = []
 
     async def fake_sleep(delay: float):
         sleep_calls.append(delay)
@@ -73,7 +74,7 @@ async def test_process_invoice_polls_pending_payment_at_sustainable_interval(
         description="test",
     )
 
-    assert sleep_calls == [tasks.PAYMENT_STATUS_POLL_INTERVAL_SECONDS]
+    assert sleep_calls == [1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 60.0, 60.0]
     assert result["preimage"] == "b" * 64
     assert result["fee_msats"] == 10
     assert result["paid"] is True

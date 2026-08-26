@@ -34,7 +34,9 @@ from .paranoia import (
 )
 from .permission import nwc_permissions
 
-PAYMENT_STATUS_POLL_INTERVAL_SECONDS = 1.0
+PAYMENT_STATUS_POLL_INITIAL_INTERVAL_SECONDS = 1.0
+PAYMENT_STATUS_POLL_MAX_INTERVAL_SECONDS = 60.0
+PAYMENT_STATUS_POLL_BACKOFF_MULTIPLIER = 2.0
 
 
 async def _check(nwc: NWCKey | None, method: str) -> dict | None:
@@ -112,6 +114,7 @@ async def _process_invoice(
         True  # currently required by nip 47 specs, might change in future
     )
     payment_status: PaymentStatus | None = None
+    poll_interval = PAYMENT_STATUS_POLL_INITIAL_INTERVAL_SECONDS
     while wait_for_preimage:
         payment_status = await check_transaction_status(wallet_id, payment_hash)
         if payment_status.success:
@@ -124,7 +127,11 @@ async def _process_invoice(
                 },
                 "in_budget": in_budget,
             }
-        await asyncio.sleep(PAYMENT_STATUS_POLL_INTERVAL_SECONDS)
+        await asyncio.sleep(poll_interval)
+        poll_interval = min(
+            poll_interval * PAYMENT_STATUS_POLL_BACKOFF_MULTIPLIER,
+            PAYMENT_STATUS_POLL_MAX_INTERVAL_SECONDS,
+        )
     if not payment_status:
         raise Exception("Payment status not found")
     return {

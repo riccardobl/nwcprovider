@@ -15,10 +15,16 @@ if [ "`cat .v039fk_lnbits_integration_test_folder`" != "yes v039fk_lnbits_integr
     exit 1
 fi
 
-# Start nostr Relay
+# Start nostr Relay. The image defaults to the `strfry` user (UID 1000),
+# which is not necessarily the user running the CI job. Create the bind mount
+# first and run the relay as the current user so LMDB can initialize its files.
+id=$(id -u)
+gid=$(id -g)
+mkdir -p strfry-data
 docker run --name=lnbits_nwcprovider_ext_nostr_test \
 -d \
 --rm \
+--user $id:$gid \
 -v $PWD/strfry.conf:/etc/strfry.conf:Z \
 -v $PWD/strfry-data:/app/strfry-db:Z \
 -p 7777:7777 \
@@ -40,10 +46,6 @@ with sqlite3.connect("lnbits_itest_data/database.sqlite3") as conn:
     conn.execute("DELETE FROM dbversions WHERE db = 'tpos'")
 PY
 rm -f lnbits_itest_data/ext_tpos.sqlite3 lnbits_itest_data/zips/tpos.zip
-
-id=$(id -u)
-gid=$(id -g)
-
 
 docker run --name=lnbits_nwcprovider_ext_lnbits_test \
 -d \

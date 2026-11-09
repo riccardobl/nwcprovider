@@ -13,6 +13,11 @@ from loguru import logger
 from pynostr.key import PrivateKey
 from websockets.legacy.client import connect
 
+from . import nip44
+
+# NIP-47 encryption schemes, in order of preference
+SUPPORTED_ENCRYPTION = ["nip44_v2", "nip04"]
+
 
 class RateLimit:
     backoff: int = 0
@@ -106,6 +111,9 @@ class NWCServiceProvider:
             raise Exception("Invalid public key")
 
         self.public_key_hex = self.public_key.hex()
+
+        # NIP-44 conversation keys per client pubkey (ECDH is not free)
+        self._nip44_conversation_keys: dict[str, bytes] = {}
 
         # List of supported methods
         self.supported_methods: list[str] = []
@@ -329,10 +337,58 @@ class NWCServiceProvider:
             "kind": 13194,
             "content": " ".join(self.supported_methods),
             "created_at": int(time.time()),
-            "tags": [["p", self.public_key_hex]],
+            "tags": [
+                ["p", self.public_key_hex],
+                ["encryption", " ".join(SUPPORTED_ENCRYPTION)],
+            ],
         }
         self._sign_event(event)
         await self._send(["EVENT", event])
+
+    def _request_encryption(self, event: dict) -> str:
+        """
+        Encryption scheme of a request (NIP-47): the "encryption" tag decides.
+        Without the tag the spec implies nip04; as a safety net, a tagless
+        request whose content is not NIP-04 shaped is treated as nip44_v2.
+        """
+        tag = next(
+            (
+                t[1]
+                for t in event.get("tags", [])
+                if len(t) > 1 and t[0] == "encryption"
+            ),
+            None,
+        )
+        if tag is None:
+            if nip44.is_nip04_payload(event["content"]):
+                return "nip04"
+            return "nip44_v2"
+        schemes = tag.split()
+        for scheme in SUPPORTED_ENCRYPTION:
+            if scheme in schemes:
+                return scheme
+        raise Exception("Unsupported encryption: " + tag)
+
+    def _conversation_key(self, pubkey_hex: str) -> bytes:
+        key = self._nip44_conversation_keys.get(pubkey_hex)
+        if key is None:
+            if len(self._nip44_conversation_keys) > 1000:
+                self._nip44_conversation_keys.clear()
+            key = nip44.get_conversation_key(
+                self.private_key.raw_secret, bytes.fromhex(pubkey_hex)
+            )
+            self._nip44_conversation_keys[pubkey_hex] = key
+        return key
+
+    def _decrypt(self, content: str, pubkey_hex: str, scheme: str) -> str:
+        if scheme == "nip44_v2":
+            return nip44.decrypt(content, self._conversation_key(pubkey_hex))
+        return self.private_key.decrypt_message(content, pubkey_hex)
+
+    def _encrypt(self, content: str, pubkey_hex: str, scheme: str) -> str:
+        if scheme == "nip44_v2":
+            return nip44.encrypt(content, self._conversation_key(pubkey_hex))
+        return self.private_key.encrypt_message(content, pubkey_hex)
 
     async def _info_event_loop(self):
         """
@@ -367,8 +423,9 @@ class NWCServiceProvider:
 
         nwc_pubkey = event["pubkey"]
         content = event["content"]
-        # Decrypt the content
-        content = self.private_key.decrypt_message(content, nwc_pubkey)
+        # Decrypt the content (the response uses the same scheme)
+        encryption = self._request_encryption(event)
+        content = self._decrypt(content, nwc_pubkey, encryption)
         # Deserialize content
         content = json.loads(content)
         # Handle request
@@ -420,9 +477,7 @@ class NWCServiceProvider:
             # Reference user
             res["tags"].append(["p", nwc_pubkey])
             # Finalize response event
-            res["content"] = self.private_key.encrypt_message(
-                res["content"], nwc_pubkey
-            )
+            res["content"] = self._encrypt(res["content"], nwc_pubkey, encryption)
             self._sign_event(res)
 
             # Register response for this request, so we knows it is not stale

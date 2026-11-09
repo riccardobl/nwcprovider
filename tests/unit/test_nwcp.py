@@ -7,6 +7,7 @@ import time
 import pytest
 from loguru import logger
 
+from ... import nip44
 from ...nwcp import NWCServiceProvider
 
 
@@ -324,3 +325,114 @@ async def test_info_event_loop_skips_when_disconnected(nwc_service_provider):
 
     # Nothing should have been sent because connected=False.
     assert len(sent) == 0
+
+
+async def _roundtrip(client, service, tags, encrypt, decrypt):
+    """Send a pay_invoice request from client to service; return decrypted reply."""
+    content = client._json_dumps(
+        {"method": "pay_invoice", "params": {"invoice": "abc"}}
+    )
+    event = {
+        "kind": 23194,
+        "content": encrypt(content),
+        "tags": [["p", service.public_key_hex], *tags],
+        "created_at": int(time.time()),
+    }
+    signed = client._sign_event(event)
+
+    async def _handle_pay_invoice(provider, pubkey, content):
+        assert content["params"]["invoice"] == "abc"
+        return [({"preimage": "00000"}, None)]
+
+    async def _send_pass(obj):
+        pass
+
+    service._send = _send_pass
+    service._create_subscription()
+    service.add_request_listener("pay_invoice", _handle_pay_invoice)
+    sent_events = await service._handle_request(signed)
+    assert len(sent_events) == 1
+    assert service._verify_event(sent_events[0])
+    return sent_events[0]["content"], json.loads(decrypt(sent_events[0]["content"]))
+
+
+def _conv(a, b):
+    return nip44.get_conversation_key(
+        a.private_key.raw_secret, bytes.fromhex(b.public_key_hex)
+    )
+
+
+@pytest.mark.asyncio
+async def test_handle_nip44(nwc_service_provider, nwc_service_provider2):
+    """A request tagged nip44_v2 is decrypted and answered with NIP-44."""
+    conv = _conv(nwc_service_provider, nwc_service_provider2)
+    raw, reply = await _roundtrip(
+        nwc_service_provider,
+        nwc_service_provider2,
+        [["encryption", "nip44_v2"]],
+        lambda c: nip44.encrypt(c, conv),
+        lambda c: nip44.decrypt(c, conv),
+    )
+    assert not nip44.is_nip04_payload(raw)
+    assert reply["result_type"] == "pay_invoice"
+    assert reply["result"]["preimage"] == "00000"
+
+
+@pytest.mark.asyncio
+async def test_handle_nip04_explicit_tag(nwc_service_provider, nwc_service_provider2):
+    """A request tagged nip04 is still answered with NIP-04."""
+    pk1, pk2 = nwc_service_provider, nwc_service_provider2
+    raw, reply = await _roundtrip(
+        pk1,
+        pk2,
+        [["encryption", "nip04"]],
+        lambda c: pk1.private_key.encrypt_message(c, pk2.public_key_hex),
+        lambda c: pk1.private_key.decrypt_message(c, pk2.public_key_hex),
+    )
+    assert nip44.is_nip04_payload(raw)
+    assert reply["result"]["preimage"] == "00000"
+
+
+@pytest.mark.asyncio
+async def test_handle_untagged_nip44_payload(
+    nwc_service_provider, nwc_service_provider2
+):
+    """No encryption tag but a NIP-44 payload: answered with NIP-44."""
+    conv = _conv(nwc_service_provider, nwc_service_provider2)
+    raw, reply = await _roundtrip(
+        nwc_service_provider,
+        nwc_service_provider2,
+        [],
+        lambda c: nip44.encrypt(c, conv),
+        lambda c: nip44.decrypt(c, conv),
+    )
+    assert not nip44.is_nip04_payload(raw)
+    assert reply["result"]["preimage"] == "00000"
+
+
+@pytest.mark.asyncio
+async def test_handle_unsupported_encryption(
+    nwc_service_provider, nwc_service_provider2
+):
+    conv = _conv(nwc_service_provider, nwc_service_provider2)
+    with pytest.raises(Exception, match="Unsupported encryption"):
+        await _roundtrip(
+            nwc_service_provider,
+            nwc_service_provider2,
+            [["encryption", "nip99"]],
+            lambda c: nip44.encrypt(c, conv),
+            lambda c: nip44.decrypt(c, conv),
+        )
+
+
+@pytest.mark.asyncio
+async def test_info_event_advertises_encryption(nwc_service_provider):
+    sent: list[list] = []
+
+    async def _send_capture(obj):
+        sent.append(obj)
+
+    nwc_service_provider._send = _send_capture
+    await nwc_service_provider._send_info_event()
+    tags = sent[0][1]["tags"]
+    assert ["encryption", "nip44_v2 nip04"] in tags
